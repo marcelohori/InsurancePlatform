@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet ef *)",
+      "PowerShell(cd 'C:\\\\Users\\\\marce\\\\source\\\\repos\\\\InsurancePlatformV01'; \\(Get-Content docker-compose.yml | Select-String -Pattern \"# Expose|restart: unless-stopped|deploy:\" | Measure-Object\\).Count)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'feat\\(ci\\): add GitHub Actions CI pipeline *)",
+      "Bash(git init *)",
+      "Bash(git config *)",
+      "Bash(git commit -m 'Initial commit: InsurancePlatformV01 with complete CI/CD pipeline *)"
+    ]
+  }
+}

@@ -1,0 +1,40 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NetArchTest.Rules" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Analise\Analise.Api\Analise.Api.csproj" />
+    <ProjectReference Include="..\..\src\Analise\Analise.Application\Analise.Application.csproj" />
+    <ProjectReference Include="..\..\src\Analise\Analise.Domain\Analise.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Analise\Analise.Infrastructure\Analise.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\BuildingBlocks\BuildingBlocks.Contracts\BuildingBlocks.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Contratacao\Contratacao.Api\Contratacao.Api.csproj" />
+    <ProjectReference Include="..\..\src\Contratacao\Contratacao.Application\Contratacao.Application.csproj" />
+    <ProjectReference Include="..\..\src\Contratacao\Contratacao.Domain\Contratacao.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Contratacao\Contratacao.Infrastructure\Contratacao.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Proposta\Proposta.Api\Proposta.Api.csproj" />
+    <ProjectReference Include="..\..\src\Proposta\Proposta.Application\Proposta.Application.csproj" />
+    <ProjectReference Include="..\..\src\Proposta\Proposta.Domain\Proposta.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Proposta\Proposta.Infrastructure\Proposta.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

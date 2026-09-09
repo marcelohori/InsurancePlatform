@@ -1,0 +1,240 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: proposta_db
+      PROPOSTA_MIGRATOR_PASSWORD: ${PROPOSTA_MIGRATOR_PASSWORD:-proposta_migrator}
+      PROPOSTA_APP_PASSWORD: ${PROPOSTA_APP_PASSWORD:-proposta_app}
+      CONTRATACAO_MIGRATOR_PASSWORD: ${CONTRATACAO_MIGRATOR_PASSWORD:-contratacao_migrator}
+      CONTRATACAO_APP_PASSWORD: ${CONTRATACAO_APP_PASSWORD:-contratacao_app}
+      ANALISE_MIGRATOR_PASSWORD: ${ANALISE_MIGRATOR_PASSWORD:-analise_migrator}
+      ANALISE_APP_PASSWORD: ${ANALISE_APP_PASSWORD:-analise_app}
+    # Expose only if needed for local debugging: uncomment ports below.
+    # In production, Postgres is accessed only from inside the Docker network.
+    # ports:
+    #   - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
+        reservations:
+          cpus: "1"
+          memory: 512M
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-insurance}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-insurance}
+    # Expose AMQP only if needed for local debugging: uncomment ports below.
+    # In production, RabbitMQ is accessed only from inside the Docker network.
+    # Management UI (15672) is NEVER exposed to the host - access it via docker exec if needed.
+    # ports:
+    #   - "5672:5672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+
+  # One-shot jobs that apply EF Core migrations using the schema-owner ("*_migrator") role.
+  # They run to completion and exit - never long-running, never invoked by the API process
+  # itself. Equivalent to the migration step of a deploy pipeline; run explicitly with
+  # `docker compose run --rm proposta-migrator` (the depends_on below also makes a plain
+  # `docker compose up` apply migrations once before starting the API, for local convenience).
+  proposta-migrator:
+    build:
+      context: .
+      dockerfile: src/Proposta/Proposta.Migrator/Dockerfile
+    environment:
+      ConnectionStrings__PropostaDbMigrator: Host=postgres;Port=5432;Database=proposta_db;Username=proposta_migrator;Password=${PROPOSTA_MIGRATOR_PASSWORD:-proposta_migrator}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+
+  contratacao-migrator:
+    build:
+      context: .
+      dockerfile: src/Contratacao/Contratacao.Migrator/Dockerfile
+    environment:
+      ConnectionStrings__ContratacaoDbMigrator: Host=postgres;Port=5432;Database=contratacao_db;Username=contratacao_migrator;Password=${CONTRATACAO_MIGRATOR_PASSWORD:-contratacao_migrator}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+
+  analise-migrator:
+    build:
+      context: .
+      dockerfile: src/Analise/Analise.Migrator/Dockerfile
+    environment:
+      ConnectionStrings__AnaliseDbMigrator: Host=postgres;Port=5432;Database=analise_db;Username=analise_migrator;Password=${ANALISE_MIGRATOR_PASSWORD:-analise_migrator}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+
+  proposta-api:
+    build:
+      context: .
+      dockerfile: src/Proposta/Proposta.Api/Dockerfile
+    ports:
+      - "5080:8080"
+    environment:
+      ConnectionStrings__PropostaDb: Host=postgres;Port=5432;Database=proposta_db;Username=proposta_app;Password=${PROPOSTA_APP_PASSWORD:-proposta_app}
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Port: 5672
+      RabbitMq__Username: ${RABBITMQ_USER:-insurance}
+      RabbitMq__Password: ${RABBITMQ_PASSWORD:-insurance}
+      Jwt__Issuer: ${JWT_ISSUER:-InsurancePlatformV01}
+      Jwt__Audience: ${JWT_AUDIENCE:-InsurancePlatformV01}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:-development-only-signing-key-change-me-32-bytes-min}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      proposta-migrator:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+
+  contratacao-api:
+    build:
+      context: .
+      dockerfile: src/Contratacao/Contratacao.Api/Dockerfile
+    ports:
+      - "5081:8080"
+    environment:
+      ConnectionStrings__ContratacaoDb: Host=postgres;Port=5432;Database=contratacao_db;Username=contratacao_app;Password=${CONTRATACAO_APP_PASSWORD:-contratacao_app}
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Port: 5672
+      RabbitMq__Username: ${RABBITMQ_USER:-insurance}
+      RabbitMq__Password: ${RABBITMQ_PASSWORD:-insurance}
+      PropostaApi__BaseUrl: http://proposta-api:8080
+      Jwt__Issuer: ${JWT_ISSUER:-InsurancePlatformV01}
+      Jwt__Audience: ${JWT_AUDIENCE:-InsurancePlatformV01}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:-development-only-signing-key-change-me-32-bytes-min}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      contratacao-migrator:
+        condition: service_completed_successfully
+      proposta-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+
+  analise-api:
+    build:
+      context: .
+      dockerfile: src/Analise/Analise.Api/Dockerfile
+    ports:
+      - "5082:8080"
+    environment:
+      ConnectionStrings__AnaliseDb: Host=postgres;Port=5432;Database=analise_db;Username=analise_app;Password=${ANALISE_APP_PASSWORD:-analise_app}
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Port: 5672
+      RabbitMq__Username: ${RABBITMQ_USER:-insurance}
+      RabbitMq__Password: ${RABBITMQ_PASSWORD:-insurance}
+      Anthropic__ApiKey: ${ANTHROPIC_API_KEY:-}
+      Anthropic__Model: ${ANTHROPIC_MODEL:-claude-haiku-4-5-20251001}
+      Jwt__Issuer: ${JWT_ISSUER:-InsurancePlatformV01}
+      Jwt__Audience: ${JWT_AUDIENCE:-InsurancePlatformV01}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:-development-only-signing-key-change-me-32-bytes-min}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      analise-migrator:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+
+volumes:
+  postgres-data:

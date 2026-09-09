@@ -1,0 +1,37 @@
+root = true
+
+[*]
+indent_style = space
+end_of_line = lf
+insert_final_newline = true
+charset = utf-8-bom
+
+[*.cs]
+indent_size = 4
+
+# .NET analyzers (Roslyn CAxxxx) catch real correctness/design issues - kept at build-breaking
+# severity via TreatWarningsAsErrors in Directory.Build.props.
+
+# StyleCop enforces a consistent house style. It stays active (visible in the IDE and build
+# output) but is intentionally kept below "warning" severity so it does not block the build on
+# stylistic-only issues (file headers, blank-line placement, etc.) - see design.md decision 14.
+dotnet_analyzer_diagnostic.category-StyleCop.CSharp.DocumentationRules.severity = none
+dotnet_diagnostic.SA0001.severity = none
+dotnet_analyzer_diagnostic.category-StyleCop.CSharp.LayoutRules.severity = suggestion
+dotnet_analyzer_diagnostic.category-StyleCop.CSharp.MaintainabilityRules.severity = suggestion
+dotnet_analyzer_diagnostic.category-StyleCop.CSharp.NamingRules.severity = suggestion
+dotnet_analyzer_diagnostic.category-StyleCop.CSharp.OrderingRules.severity = suggestion
+dotnet_analyzer_diagnostic.category-StyleCop.CSharp.ReadabilityRules.severity = suggestion
+dotnet_analyzer_diagnostic.category-StyleCop.CSharp.SpacingRules.severity = suggestion
+dotnet_analyzer_diagnostic.category-StyleCop.CSharp.SpecialRules.severity = suggestion
+
+[tests/**.cs]
+# Underscore-separated test method names (Should_Do_X_When_Y) are the accepted xUnit convention.
+dotnet_diagnostic.CA1707.severity = none
+# xUnit's [CollectionDefinition] marker classes are conventionally named "*Collection".
+dotnet_diagnostic.CA1711.severity = none
+
+[**/Migrations/*.cs]
+# EF Core scaffolds these - they are not hand-maintained, so code-quality analyzers don't apply.
+generated_code = true
+dotnet_analyzer_diagnostic.severity = none

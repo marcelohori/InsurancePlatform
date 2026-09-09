@@ -1,0 +1,87 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore InsurancePlatformV01.slnx
+
+    - name: Build
+      run: dotnet build InsurancePlatformV01.slnx --configuration Release --no-restore
+
+    - name: Run Unit Tests
+      run: dotnet test InsurancePlatformV01.slnx --configuration Release --no-build --verbosity normal --filter "UnitTests" --logger "trx;LogFileName=test-results.trx"
+
+    - name: Run Integration Tests
+      run: dotnet test InsurancePlatformV01.slnx --configuration Release --no-build --verbosity normal --filter "IntegrationTests" --logger "trx;LogFileName=test-results-integration.trx"
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: '**/test-results*.trx'
+
+    - name: Publish test report
+      uses: dorny/test-reporter@v1
+      if: always()
+      with:
+        name: Test Results
+        path: '**/test-results*.trx'
+        reporter: 'dotnet trx'
+
+  code-quality:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v2
+      with:
+        languages: 'csharp'
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Build for CodeQL
+      run: dotnet build InsurancePlatformV01.slnx --configuration Release
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v2
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker images
+      run: |
+        docker buildx build --load -t proposta:test -f src/Proposta/Proposta.Api/Dockerfile .
+        docker buildx build --load -t contratacao:test -f src/Contratacao/Contratacao.Api/Dockerfile .
+        docker buildx build --load -t analise:test -f src/Analise/Analise.Api/Dockerfile .
+      continue-on-error: true

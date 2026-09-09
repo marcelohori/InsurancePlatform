@@ -1,0 +1,36 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Analise/">
+    <Project Path="src/Analise/Analise.Api/Analise.Api.csproj" />
+    <Project Path="src/Analise/Analise.Application/Analise.Application.csproj" />
+    <Project Path="src/Analise/Analise.Domain/Analise.Domain.csproj" />
+    <Project Path="src/Analise/Analise.Infrastructure/Analise.Infrastructure.csproj" />
+    <Project Path="src/Analise/Analise.Migrator/Analise.Migrator.csproj" />
+  </Folder>
+  <Folder Name="/src/BuildingBlocks/">
+    <Project Path="src/BuildingBlocks/BuildingBlocks.Contracts/BuildingBlocks.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/src/Contratacao/">
+    <Project Path="src/Contratacao/Contratacao.Api/Contratacao.Api.csproj" />
+    <Project Path="src/Contratacao/Contratacao.Application/Contratacao.Application.csproj" />
+    <Project Path="src/Contratacao/Contratacao.Domain/Contratacao.Domain.csproj" />
+    <Project Path="src/Contratacao/Contratacao.Infrastructure/Contratacao.Infrastructure.csproj" />
+    <Project Path="src/Contratacao/Contratacao.Migrator/Contratacao.Migrator.csproj" />
+  </Folder>
+  <Folder Name="/src/Proposta/">
+    <Project Path="src/Proposta/Proposta.Api/Proposta.Api.csproj" />
+    <Project Path="src/Proposta/Proposta.Application/Proposta.Application.csproj" />
+    <Project Path="src/Proposta/Proposta.Domain/Proposta.Domain.csproj" />
+    <Project Path="src/Proposta/Proposta.Infrastructure/Proposta.Infrastructure.csproj" />
+    <Project Path="src/Proposta/Proposta.Migrator/Proposta.Migrator.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Analise.IntegrationTests/Analise.IntegrationTests.csproj" />
+    <Project Path="tests/Analise.UnitTests/Analise.UnitTests.csproj" />
+    <Project Path="tests/Architecture.Tests/Architecture.Tests.csproj" />
+    <Project Path="tests/Contratacao.IntegrationTests/Contratacao.IntegrationTests.csproj" />
+    <Project Path="tests/Contratacao.UnitTests/Contratacao.UnitTests.csproj" />
+    <Project Path="tests/Proposta.IntegrationTests/Proposta.IntegrationTests.csproj" />
+    <Project Path="tests/Proposta.UnitTests/Proposta.UnitTests.csproj" />
+  </Folder>
+</Solution>

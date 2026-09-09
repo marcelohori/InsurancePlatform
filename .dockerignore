@@ -1,0 +1,57 @@
+﻿# Version control
+.git
+.gitignore
+.gitattributes
+
+# IDEs
+.vscode
+.vs
+*.swp
+*.swo
+*~
+.idea
+*.iml
+*.suo
+
+# Build outputs
+bin
+obj
+**/bin
+**/obj
+*.trx
+
+# Test artifacts
+TestResults
+coverage.xml
+.coverage
+htmlcov
+
+# Node/npm (if any frontend)
+node_modules
+npm-debug.log
+yarn.lock
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Docker
+.docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation
+README.md
+CONTRIBUTING.md
+LICENSE
+docs
+
+# OpenSpec/change management
+openspec
+
+# Temporary/scratch files
+.temp
+.tmp
+*.log

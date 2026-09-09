@@ -1,0 +1,23 @@
+## .NET
+bin/
+obj/
+*.user
+
+## Test results
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+*.coveragexml
+
+## IDE
+.vs/
+.vscode/
+*.suo
+
+## Docker
+*.env
+!.env.example
+
+## OS
+.DS_Store
+Thumbs.db

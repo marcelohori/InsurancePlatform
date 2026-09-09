@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Analise.Infrastructure\Analise.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Explicit, even though Analise.Infrastructure references both transitively - without
+         it, NuGet resolves Microsoft.EntityFrameworkCore to whatever version Npgsql's own
+         dependency graph asks for instead of this repo's centrally managed one, which breaks
+         at compile time against Analise.Infrastructure.dll (CS1705, assembly version mismatch). -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+</Project>

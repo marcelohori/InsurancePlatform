@@ -1,0 +1,44 @@
+version: 2
+updates:
+  # NuGet dependencies
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "marcelohori"
+    labels:
+      - "dependencies"
+      - "nuget"
+    commit-message:
+      prefix: "chore(deps):"
+      include: "scope"
+    pull-request-branch-name:
+      separator: "/"
+    allow:
+      - dependency-type: "all"
+    rebase-strategy: "auto"
+    # Ignore major version bumps for pre-release/.NET versions
+    ignore:
+      - dependency-name: "MassTransit"
+        # Pinned to Apache-licensed v8, v9 requires commercial license
+      - dependency-name: "System.*"
+        # Monitor .NET updates separately from NuGet
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:30"
+    reviewers:
+      - "marcelohori"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci(actions):"
