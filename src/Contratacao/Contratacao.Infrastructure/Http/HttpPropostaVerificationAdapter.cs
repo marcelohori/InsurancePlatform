@@ -78,7 +78,7 @@ public sealed class HttpPropostaVerificationAdapter(HttpClient httpClient, IHttp
     private static bool ValidarAuthorizationHeader(string header)
     {
         const int MaxHeaderLength = 8192;
-        const int MaxJwtLength = 4096;
+        const int MaxTokenLength = 4096;
 
         if (header.Length > MaxHeaderLength)
         {
@@ -92,19 +92,7 @@ public sealed class HttpPropostaVerificationAdapter(HttpClient httpClient, IHttp
         }
 
         var token = bearerMatch.Groups[1].Value;
-        return token.Length <= MaxJwtLength && IsValidJwtFormat(token);
-    }
-
-    private static bool IsValidJwtFormat(string token)
-    {
-        var parts = token.Split('.');
-        return parts.Length == 3 &&
-               !string.IsNullOrEmpty(parts[0]) &&
-               !string.IsNullOrEmpty(parts[1]) &&
-               !string.IsNullOrEmpty(parts[2]) &&
-               parts[0].Length <= 2048 &&
-               parts[1].Length <= 4096 &&
-               parts[2].Length <= 1024;
+        return !string.IsNullOrWhiteSpace(token) && token.Length <= MaxTokenLength;
     }
 
     private sealed record PropostaApiResponse(Guid Id, string Status);

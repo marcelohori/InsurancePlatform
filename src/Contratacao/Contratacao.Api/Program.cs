@@ -2,6 +2,7 @@
 using System.Text.Json.Serialization;
 using Asp.Versioning;
 using BuildingBlocks.Contracts.Authorization;
+using Contratacao.Api.Filters;
 using Contratacao.Api.Middleware;
 using Contratacao.Application.DependencyInjection;
 using Contratacao.Infrastructure.DependencyInjection;
@@ -26,10 +27,10 @@ builder.Services
     .AddContratacaoApplication();
 
 builder.Services
-    .AddValidatorsFromAssembly(typeof(Program).Assembly);
+    .AddValidatorsFromAssembly(typeof(Contratacao.Application.Validators.CriarContratacaoRequestValidator).Assembly);
 
 builder.Services
-    .AddControllers()
+    .AddControllers(options => options.Filters.Add<FluentValidationFilter>())
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 builder.Services.AddOpenApi();

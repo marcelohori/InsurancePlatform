@@ -1,0 +1,197 @@
+{
+  "info": {
+    "name": "InsurancePlatformV01",
+    "description": "Coleção de requisições para os 3 microsserviços (Proposta, Contratacao, Analise) do InsurancePlatformV01. Configure a variável {{jwt_token}} com um JWT válido (veja README.md > Endpoints e Acessos > Autenticação) antes de rodar as requisições protegidas.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "proposta_base_url", "value": "http://localhost:5080" },
+    { "key": "contratacao_base_url", "value": "http://localhost:5081" },
+    { "key": "analise_base_url", "value": "http://localhost:5082" },
+    { "key": "jwt_token", "value": "" },
+    { "key": "proposta_id", "value": "" },
+    { "key": "contratacao_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Proposta",
+      "item": [
+        {
+          "name": "Health - Live",
+          "request": {
+            "method": "GET",
+            "url": "{{proposta_base_url}}/health/live",
+            "auth": { "type": "noauth" }
+          }
+        },
+        {
+          "name": "Health - Ready",
+          "request": {
+            "method": "GET",
+            "url": "{{proposta_base_url}}/health/ready"
+          }
+        },
+        {
+          "name": "Criar Proposta",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{proposta_base_url}}/api/v1.0/propostas",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nomeSegurado\": \"Maria Silva\",\n  \"documentoSegurado\": \"11144477735\",\n  \"tipoSeguro\": \"Auto\",\n  \"valorCobertura\": 50000,\n  \"moedaCobertura\": \"BRL\",\n  \"valorPremio\": 1200,\n  \"moedaPremio\": \"BRL\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Listar Propostas",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{proposta_base_url}}/api/v1.0/propostas?pagina=1&tamanhoPagina=20",
+              "host": ["{{proposta_base_url}}"],
+              "path": ["api", "v1.0", "propostas"],
+              "query": [
+                { "key": "pagina", "value": "1" },
+                { "key": "tamanhoPagina", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Obter Proposta por Id",
+          "request": {
+            "method": "GET",
+            "url": "{{proposta_base_url}}/api/v1.0/propostas/{{proposta_id}}"
+          }
+        },
+        {
+          "name": "Atualizar Proposta",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{proposta_base_url}}/api/v1.0/propostas/{{proposta_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nomeSegurado\": \"Maria Silva\",\n  \"documentoSegurado\": \"11144477735\",\n  \"tipoSeguro\": \"Auto\",\n  \"valorCobertura\": 60000,\n  \"moedaCobertura\": \"BRL\",\n  \"valorPremio\": 1300,\n  \"moedaPremio\": \"BRL\",\n  \"status\": \"Aprovada\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Deletar Proposta",
+          "request": {
+            "method": "DELETE",
+            "url": "{{proposta_base_url}}/api/v1.0/propostas/{{proposta_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contratacao",
+      "item": [
+        {
+          "name": "Health - Live",
+          "request": {
+            "method": "GET",
+            "url": "{{contratacao_base_url}}/health/live",
+            "auth": { "type": "noauth" }
+          }
+        },
+        {
+          "name": "Health - Ready",
+          "request": {
+            "method": "GET",
+            "url": "{{contratacao_base_url}}/health/ready"
+          }
+        },
+        {
+          "name": "Criar Contratacao",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "url": "{{contratacao_base_url}}/api/v1.0/contratacoes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"propostaId\": \"{{proposta_id}}\",\n  \"dataContratacao\": \"2026-01-01\",\n  \"dataInicioVigencia\": \"2026-01-01\",\n  \"dataFimVigencia\": \"2027-01-01\",\n  \"valorPremio\": 1200,\n  \"moedaValorPremio\": \"BRL\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Listar Contratacoes",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{contratacao_base_url}}/api/v1.0/contratacoes?pagina=1&tamanhoPagina=20",
+              "host": ["{{contratacao_base_url}}"],
+              "path": ["api", "v1.0", "contratacoes"],
+              "query": [
+                { "key": "pagina", "value": "1" },
+                { "key": "tamanhoPagina", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Obter Contratacao por Id",
+          "request": {
+            "method": "GET",
+            "url": "{{contratacao_base_url}}/api/v1.0/contratacoes/{{contratacao_id}}"
+          }
+        },
+        {
+          "name": "Atualizar Contratacao",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{contratacao_base_url}}/api/v1.0/contratacoes/{{contratacao_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataInicioVigencia\": \"2026-01-01\",\n  \"dataFimVigencia\": \"2027-06-01\",\n  \"valorPremio\": 1350,\n  \"moedaValorPremio\": \"BRL\",\n  \"status\": \"Ativa\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Deletar Contratacao",
+          "request": {
+            "method": "DELETE",
+            "url": "{{contratacao_base_url}}/api/v1.0/contratacoes/{{contratacao_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analise",
+      "item": [
+        {
+          "name": "Health - Live",
+          "request": {
+            "method": "GET",
+            "url": "{{analise_base_url}}/health/live",
+            "auth": { "type": "noauth" }
+          }
+        },
+        {
+          "name": "Health - Ready",
+          "request": {
+            "method": "GET",
+            "url": "{{analise_base_url}}/health/ready"
+          }
+        },
+        {
+          "name": "Obter Analise por Proposta Id",
+          "request": {
+            "method": "GET",
+            "url": "{{analise_base_url}}/api/v1.0/propostas/{{proposta_id}}/analise"
+          }
+        }
+      ]
+    }
+  ]
+}
