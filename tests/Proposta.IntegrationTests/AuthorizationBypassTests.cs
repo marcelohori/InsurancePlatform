@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Proposta.Application.Contracts;
 using Proposta.Application.Dtos;
 using Proposta.Domain;
@@ -13,6 +14,10 @@ namespace Proposta.IntegrationTests;
 [Collection(nameof(PropostaApiCollection))]
 public sealed class AuthorizationBypassTests(PropostaApiFactory factory)
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() },
+    };
     private readonly HttpClient _client = factory.CreateClient();
 
     [Fact]
@@ -84,6 +89,6 @@ public sealed class AuthorizationBypassTests(PropostaApiFactory factory)
     private static async Task<T?> ReadAsAsync<T>(HttpContent content)
     {
         var json = await content.ReadAsStringAsync();
-        return JsonSerializer.Deserialize<T>(json);
+        return JsonSerializer.Deserialize<T>(json, JsonOptions);
     }
 }

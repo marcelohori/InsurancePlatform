@@ -1,5 +1,6 @@
 using FluentValidation;
 using Proposta.Application.Dtos;
+using Proposta.Domain;
 
 namespace Proposta.Application.Validators;
 
@@ -17,7 +18,7 @@ public sealed class CriarPropostaCommandValidator : AbstractValidator<CriarPropo
 
         RuleFor(x => x.TipoSeguro)
             .NotEmpty().WithMessage("Tipo de seguro é obrigatório")
-            .Must(BeValidTipoSeguro).WithMessage("Tipo de seguro inválido (Vida, Saude, Propriedade)");
+            .Must(BeValidTipoSeguro).WithMessage("Tipo de seguro inválido (Auto, Vida, Residencial, Saude)");
 
         RuleFor(x => x.ValorCobertura)
             .GreaterThan(0).WithMessage("Valor de cobertura deve ser maior que zero")
@@ -37,10 +38,7 @@ public sealed class CriarPropostaCommandValidator : AbstractValidator<CriarPropo
     }
 
     private static bool BeValidTipoSeguro(string tipoSeguro) =>
-        !string.IsNullOrWhiteSpace(tipoSeguro) &&
-        (tipoSeguro.Equals("Vida", StringComparison.OrdinalIgnoreCase) ||
-         tipoSeguro.Equals("Saude", StringComparison.OrdinalIgnoreCase) ||
-         tipoSeguro.Equals("Propriedade", StringComparison.OrdinalIgnoreCase));
+        Enum.TryParse<TipoSeguro>(tipoSeguro, ignoreCase: true, out _);
 
     private static bool HaveTwoDecimals(decimal value) =>
         decimal.Round(value, 2) == value;

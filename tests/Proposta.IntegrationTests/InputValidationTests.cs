@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Proposta.Application.Contracts;
 using Proposta.Application.Dtos;
 using Xunit;
@@ -11,6 +12,10 @@ namespace Proposta.IntegrationTests;
 [Collection(nameof(PropostaApiCollection))]
 public sealed class InputValidationTests(PropostaApiFactory factory)
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() },
+    };
     private readonly HttpClient _client = factory.CreateClient();
 
     private void SetupAuth()

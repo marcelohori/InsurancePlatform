@@ -1,137 +1,686 @@
-﻿# InsurancePlatformV01
+# 🏢 InsurancePlatformV01
 
-[![CI Pipeline](https://github.com/marcelohori/InsurancePlatformV01/actions/workflows/ci.yml/badge.svg)](https://github.com/marcelohori/InsurancePlatformV01/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/marcelohori/InsurancePlatformV01/actions/workflows/codeql.yml/badge.svg)](https://github.com/marcelohori/InsurancePlatformV01/security/code-scanning)
-![.NET 10](https://img.shields.io/badge/.NET-10.0-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+[![CI Pipeline](https://img.shields.io/badge/CI/CD-GitHub%20Actions-2088FF?style=flat-square&logo=github-actions)](https://github.com/marcelohori/InsurancePlatformV01/actions)
+[![CodeQL](https://img.shields.io/badge/Security-CodeQL-green?style=flat-square&logo=github)](https://github.com/marcelohori/InsurancePlatformV01/security)
+[![.NET Version](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet)](https://dotnet.microsoft.com/)
+[![Architecture](https://img.shields.io/badge/Architecture-Hexagonal-FF6B6B?style=flat-square)](https://en.wikipedia.org/wiki/Hexagonal_architecture_(software))
+[![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-Projeto de referência em .NET 10 — plataforma de gestão de propostas e contratação composta por três microsserviços independentes que seguem Arquitetura Hexagonal (Ports & Adapters), DDD e Clean Architecture.
+**Uma plataforma de gestão de propostas e contratação de seguros construída com .NET 10, seguindo Arquitetura Hexagonal, DDD e Clean Architecture.**
 
-Serviços e portas por padrão:
+> Projeto de referência demonstrando melhores práticas em design de microsserviços, segurança, resiliência e DevOps.
 
-- Proposta.Api — CRUD de propostas e endpoints REST (porta local: 5080)
-- Contratacao.Api — contratação a partir de propostas aprovadas (porta local: 5081)
-- Analise.Api — análise de risco usando adaptador de IA (Anthropic) (porta local: 5082)
+---
 
-Componentes principais
-- Comunicação: REST síncrono entre serviços e eventos assíncronos via RabbitMQ (MassTransit).
-- Persistência: PostgreSQL (um banco por serviço). EF Core + migrations.
-- Observabilidade: Serilog + OpenTelemetry (OTLP exporter).
+## 📋 Índice
 
-Prerequisitos
-- .NET 10 SDK
-- Docker & Docker Compose (recomendado para ambiente de desenvolvimento)
+- [📖 Introdução](#-introdução)
+- [🛠️ Tecnologias](#️-tecnologias)
+- [📚 Documentação](#-documentação)
+- [🎯 Visão Geral](#-visão-geral)
+- [🏗️ Arquitetura do Sistema](#️-arquitetura-do-sistema)
+- [🔄 Fluxo de Funcionamento](#-fluxo-de-funcionamento)
+- [📦 Estrutura do Projeto](#-estrutura-do-projeto)
+- [🧩 Camada, Subcamada e Responsabilidade](#-camada-subcamada-e-responsabilidade)
+- [🚀 Como Executar](#-como-executar)
+- [🔌 Endpoints e Acessos](#-endpoints-e-acessos)
+- [🗄️ Script SQL](#️-script-sql)
+- [🧪 Testes](#-testes)
+- [🤖 IA](#-ia)
+- [🔒 Segurança & Qualidade](#-segurança--qualidade)
+- [📊 CI/CD Pipeline](#-cicd-pipeline)
+- [🤝 Contribuindo](#-contribuindo)
 
-Subir o ambiente local (Docker)
-1. Copie `.env.example` para `.env` e ajuste valores sensíveis (JWT_SIGNING_KEY, POSTGRES_PASSWORD, RABBITMQ_PASSWORD, ANTHROPIC_API_KEY, senhas dos roles `*_migrator`/`*_app`).
-2. Execute:
+---
+
+## 📖 Introdução
+
+InsurancePlatformV01 é uma plataforma de gestão de propostas e contratação de seguros, construída como **3 microsserviços independentes** (`Proposta`, `Contratacao`, `Analise`) que se comunicam via **REST síncrono** (verificação de proposta antes de contratar) e **eventos assíncronos** (avaliação de risco), cada um com sua própria base de dados PostgreSQL (*polyglot persistence*, um banco por serviço).
+
+O projeto foi desenvolvido como referência de boas práticas em **.NET 10**, aplicando **Arquitetura Hexagonal (Ports & Adapters)**, **Domain-Driven Design** e **Clean Architecture**, com foco em segurança (JWT + RBAC), resiliência (retry/circuit-breaker/timeout via Polly), observabilidade (Serilog + OpenTelemetry) e uma suíte de **125 testes automatizados** (unitários, integração com Testcontainers e regras de arquitetura).
+
+### Principais Funcionalidades
+
+| Funcionalidade | Descrição |
+|---|---|
+| **Gestão de Propostas** | CRUD completo de propostas de seguro (Auto, Vida, Residencial, Saúde), com controle de posse (usuário só vê/edita as próprias) |
+| **Avaliação de Risco com IA** | Toda proposta criada dispara, de forma assíncrona, uma avaliação de risco via **Anthropic API** (score 0-100, recomendação e justificativa) |
+| **Contratação de Apólices** | Conversão de uma proposta **aprovada** em apólice, com verificação síncrona da proposta e suporte a idempotência (`Idempotency-Key`) |
+| **Autenticação e Autorização** | JWT Bearer + políticas baseadas em papéis (`usuario`, `analista`, `admin`) |
+| **Mensageria Confiável** | RabbitMQ + MassTransit com *Transactional Outbox Pattern* (garantia at-least-once) |
+| **Observabilidade** | Logs estruturados (Serilog) e tracing/métricas distribuídos (OpenTelemetry/OTLP) |
+| **Health Checks** | Liveness e readiness por serviço, validando conexão com Postgres e RabbitMQ |
+
+### Características Técnicas
+
+| Característica | Descrição |
+|---|---|
+| **3 Microsserviços** | Proposta, Contratacao, Analise — cada um independente, com seu próprio banco |
+| **Event-Driven** | RabbitMQ + MassTransit para comunicação assíncrona (Outbox Pattern) |
+| **Banco por Serviço** | PostgreSQL isolado por microsserviço |
+| **API REST** | Versionamento explícito via `Asp.Versioning` (v1.0) |
+| **Segurança** | JWT + Role-based Authorization + Input Validation (FluentValidation) |
+| **Resiliência** | Circuit-breaker, retry, timeout policies via Polly (chamadas HTTP e Anthropic API) |
+| **Testes** | 125 testes (unit + integration com Testcontainers + regras de arquitetura) |
+| **DevOps Ready** | Docker Compose, GitHub Actions, Health Checks |
+
+---
+
+## 🛠️ Tecnologias
+
+Todas as versões abaixo são as **efetivamente fixadas** em [`Directory.Packages.props`](Directory.Packages.props) (Central Package Management).
+
+### Core Framework
+
+| Tecnologia | Versão |
+|---|---|
+| .NET / C# | **.NET 10.0** |
+| ASP.NET Core | 10.0 (Web API, DI, Health Checks) |
+| Entity Framework Core | **10.0.12** |
+| Npgsql.EntityFrameworkCore.PostgreSQL | **10.0.3** |
+| Asp.Versioning.Mvc / .ApiExplorer | **8.1.0** |
+| Microsoft.AspNetCore.Authentication.JwtBearer | **10.0.11** |
+| Microsoft.AspNetCore.OpenApi | **10.0.11** |
+
+### Banco de Dados
+
+| Tecnologia | Versão |
+|---|---|
+| PostgreSQL | **16** (imagem `postgres:16-alpine`) |
+| EF Core Migrations | Versionamento de schema, roles separados por serviço (`*_migrator` / `*_app`) |
+
+### Mensageria
+
+| Tecnologia | Versão |
+|---|---|
+| MassTransit / MassTransit.RabbitMQ / MassTransit.EntityFrameworkCore | **8.5.10** (pinned — v9 exige licença comercial) |
+| RabbitMQ | **3-management-alpine** |
+
+### Validação e Qualidade de Código
+
+| Tecnologia | Versão |
+|---|---|
+| FluentValidation | **11.10.0** |
+| FluentValidation.DependencyInjectionExtensions | **11.10.0** |
+| StyleCop.Analyzers | 1.2.0-beta.556 |
+| .NET Analyzers | Built-in, `TreatWarningsAsErrors=true` |
+
+### Resiliência & Observabilidade
+
+| Tecnologia | Versão |
+|---|---|
+| Microsoft.Extensions.Http.Resilience (Polly) | **9.10.0** |
+| Serilog.AspNetCore | **9.0.0** |
+| OpenTelemetry (Hosting/AspNetCore/Http/OTLP Exporter) | **1.18.0** |
+| AspNetCore.HealthChecks.NpgSql / .Rabbitmq | **9.0.0** |
+
+### Testes
+
+| Tecnologia | Versão |
+|---|---|
+| xUnit | **2.9.3** |
+| xunit.runner.visualstudio | 2.8.2 |
+| Microsoft.AspNetCore.Mvc.Testing | **10.0.11** |
+| Testcontainers.PostgreSql / .RabbitMq | **4.15.0** |
+| WireMock.Net | **2.15.0** |
+| NetArchTest.Rules | 1.3.2 |
+| coverlet.collector | 6.0.4 |
+
+### IA
+
+| Tecnologia | Versão |
+|---|---|
+| Anthropic Messages API | `2023-06-01` (modelo padrão: `claude-haiku-4-5-20251001`, configurável) |
+
+### DevOps
+
+| Tecnologia | Versão |
+|---|---|
+| Docker / Docker Compose | Multi-stage builds, non-root execution, resource limits |
+| GitHub Actions | Pipeline de CI/CD (build, testes, CodeQL, build de imagens) |
+| CodeQL | Security scanning estático |
+
+---
+
+## 📚 Documentação
+
+| Documento | Descrição |
+|---|---|
+| [📜 Histórico (CHANGELOG.md)](CHANGELOG.md) | Linha do tempo de evolução do schema e das principais entregas |
+| [📮 Postman Collection](docs/postman/InsurancePlatformV01.postman_collection.json) | Coleção com todas as requisições dos 3 serviços prontas para importar |
+| [🗄️ Scripts SQL](docs/sql/) | Scripts DDL idempotentes gerados via `dotnet ef migrations script` para as 3 bases |
+| [🏗️ ARCHITECTURE.md](ARCHITECTURE.md) | Diagramas C4 completos, padrões de resiliência e estratégias de deployment |
+| [🔒 SECURITY.md](SECURITY.md) | Política de segurança e como reportar vulnerabilidades |
+| [🤝 CONTRIBUTION.md](CONTRIBUTION.md) | Guia para contribuidores |
+| [📦 DEPENDENCY_POLICY.md](DEPENDENCY_POLICY.md) | Política de atualização de dependências |
+| [🔍 LANGUAGE_ANALYSIS_POLICY.md](LANGUAGE_ANALYSIS_POLICY.md) | Versão de C#, analyzers e regras de qualidade |
+
+---
+
+## 🎯 Visão Geral
+
+| Serviço | Responsabilidade | Porta (host) |
+|---|---|---|
+| **Proposta.Api** | CRUD de propostas de seguro; publica `PropostaCriadaEvent` ao criar uma proposta | `5080` |
+| **Contratacao.Api** | Converte uma proposta **aprovada** em apólice; verifica a proposta via HTTP e publica `ContratacaoEfetuadaEvent` | `5081` |
+| **Analise.Api** | Consome `PropostaCriadaEvent` e realiza avaliação de risco assistida por IA (Anthropic) | `5082` |
+| **PostgreSQL** | Uma base por serviço (`proposta_db`, `contratacao_db`, `analise_db`) — acesso apenas interno à rede Docker | `5432` (interno) |
+| **RabbitMQ** | Message broker (AMQP + Management UI) usado pelo MassTransit — acesso apenas interno à rede Docker | `5672` / `15672` (interno) |
+
+> Os três serviços de API expõem ainda um job de migração dedicado (`*.Migrator`), que roda uma única vez para aplicar o schema com um usuário de banco com permissão de DDL, separado do usuário de runtime da API (permissão apenas de DML) — ver [Segurança & Qualidade](#-segurança--qualidade).
+
+---
+
+## 🏗️ Arquitetura do Sistema
+
+```mermaid
+graph TB
+    subgraph Client["Cliente"]
+        WebApp["🌐 Web/Mobile / Postman"]
+    end
+
+    subgraph Platform["InsurancePlatformV01"]
+        subgraph Proposta["Proposta Service"]
+            PropostaAPI["🔵 Proposta.Api<br/>:5080"]
+            PropostaApp["📦 Application<br/>(Use Cases + Validators)"]
+            PropostaDomain["🎯 Domain<br/>(PropostaSeguro)"]
+            PropostaDB["💾 proposta_db<br/>(PostgreSQL)"]
+        end
+
+        subgraph Contratacao["Contratacao Service"]
+            ContratacaoAPI["🔵 Contratacao.Api<br/>:5081"]
+            ContratacaoApp["📦 Application<br/>(Use Cases + Validators)"]
+            ContratacaoDomain["🎯 Domain<br/>(ApoliceSeguro)"]
+            ContratacaoDB["💾 contratacao_db<br/>(PostgreSQL)"]
+        end
+
+        subgraph Analise["Analise Service"]
+            AnaliseAPI["🔵 Analise.Api<br/>:5082"]
+            AnaliseApp["📦 Application<br/>(Use Cases)"]
+            AnaliseDomain["🎯 Domain<br/>(AnaliseRisco)"]
+            AnaliseDB["💾 analise_db<br/>(PostgreSQL)"]
+        end
+
+        MessageBus["📨 RabbitMQ<br/>(MassTransit v8.5.10)"]
+    end
+
+    Anthropic["🤖 Anthropic API<br/>(Avaliação de Risco)"]
+
+    WebApp -->|"REST + JWT"| PropostaAPI
+    WebApp -->|"REST + JWT"| ContratacaoAPI
+    WebApp -->|"REST + JWT"| AnaliseAPI
+
+    PropostaAPI --> PropostaApp --> PropostaDomain --> PropostaDB
+    ContratacaoAPI --> ContratacaoApp --> ContratacaoDomain --> ContratacaoDB
+    AnaliseAPI --> AnaliseApp --> AnaliseDomain --> AnaliseDB
+
+    PropostaAPI -->|"Publish PropostaCriadaEvent<br/>(Outbox)"| MessageBus
+    MessageBus -->|"Subscribe"| AnaliseAPI
+    ContratacaoAPI -->|"Publish ContratacaoEfetuadaEvent<br/>(Outbox)"| MessageBus
+
+    ContratacaoAPI -->|"HTTP síncrono<br/>(verificar proposta)"| PropostaAPI
+    AnaliseAPI -->|"HTTP + resiliência (Polly)"| Anthropic
+
+    style Platform fill:#f9f9f9,stroke:#333,stroke-width:2px
+    style Proposta fill:#E3F2FD,stroke:#1976D2
+    style Contratacao fill:#F3E5F5,stroke:#7B1FA2
+    style Analise fill:#E8F5E9,stroke:#388E3C
+    style MessageBus fill:#FFE0B2,stroke:#F57C00,stroke-width:2px
+    style Anthropic fill:#9C27B0,color:#fff
+```
+
+> Mais diagramas (System Context C4, Deployment, Clean Architecture Layers, Component Diagram) estão em [ARCHITECTURE.md](ARCHITECTURE.md).
+
+### 📐 Padrões Utilizados
+
+- **Arquitetura Hexagonal**: separação entre core de negócio (Domain) e infraestrutura (Ports & Adapters)
+- **Domain-Driven Design**: linguagem ubíqua, value objects (`Monetario`, `Vigencia`, `DocumentoIdentificacao`)
+- **Clean Architecture**: dependências sempre apontam para dentro (Domain não depende de nada)
+- **Outbox Pattern**: garantia de entrega *at-least-once* dos eventos (`OutboxState`/`OutboxMessage` do MassTransit, na mesma transação da escrita de domínio)
+- **Idempotency Key**: `POST /contratacoes` é seguro para retry via header `Idempotency-Key` (UUID v4)
+
+---
+
+## 🔄 Fluxo de Funcionamento
+
+Passo a passo real (validado no código dos três serviços) de como uma proposta se torna uma apólice:
+
+1. **Criação da proposta** — o cliente autentica-se com um JWT (papel `usuario`, `analista` ou `admin`) e chama `POST /api/v1.0/propostas` no **Proposta.Api**. O `FluentValidationFilter` valida o payload (`CriarPropostaCommand`), o Use Case cria a entidade `PropostaSeguro` com status **`EmAnalise`** e grava, na mesma transação, o evento `PropostaCriadaEvent` na tabela de Outbox.
+2. **Publicação assíncrona** — o *Outbox Delivery Service* do MassTransit publica `PropostaCriadaEvent` no RabbitMQ de forma assíncrona, desacoplada da resposta HTTP já devolvida ao cliente (201 Created).
+3. **Avaliação de risco por IA** — o **Analise.Api** consome o evento (`PropostaCriadaEventConsumer`), cria um registro `AnaliseRisco` (status `EmProcessamento`) e chama a **Anthropic API** através de um `HttpClient` com política de resiliência (retry, timeout, circuit-breaker via Polly). A resposta é validada (score 0-100, recomendação `Aprovar`/`Rejeitar`, justificativa) e persistida (status `Concluida` ou `Falha` em caso de erro do provedor).
+4. **Consulta da análise** — o cliente pode consultar o resultado a qualquer momento em `GET /api/v1.0/propostas/{propostaId}/analise` no **Analise.Api**. A IA é **consultiva**: ela não altera o status da proposta.
+5. **Decisão humana** — um usuário com papel `analista` ou `admin` chama `PUT /api/v1.0/propostas/{id}` no **Proposta.Api** para mudar o status da proposta para `Aprovada` (ou `Rejeitada`), tipicamente usando a recomendação da IA como subsídio.
+6. **Contratação** — com a proposta `Aprovada`, um `analista`/`admin` chama `POST /api/v1.0/contratacoes` no **Contratacao.Api**, opcionalmente com o header `Idempotency-Key` (UUID v4) para tornar a chamada segura a retries. O Use Case:
+   - verifica a chave de idempotência (se enviada) — se já usada com o mesmo payload, retorna a apólice já criada; se usada com payload diferente, retorna `409 Conflict`;
+   - chama **sincronamente**, via HTTP resiliente, o **Proposta.Api** (`IPropostaVerificationPort`) para confirmar que a proposta existe e está `Aprovada` — senão, `404`/`409`;
+   - cria a entidade `ApoliceSeguro` e publica `ContratacaoEfetuadaEvent` no barramento (disponível para consumidores futuros, ex.: faturamento/notificações).
+
+### Aderência à Arquitetura Hexagonal
+
+Cada serviço segue rigorosamente **Ports & Adapters**: o `Domain` nunca depende de `Application` ou `Infrastructure` (validado automaticamente pelos `Architecture.Tests` com `NetArchTest.Rules`); a `Application` define **portas** (interfaces) que a `Infrastructure` implementa como **adaptadores**; e a `Api` é o adaptador de entrada (driving adapter) que aciona os casos de uso.
+
+| Camada do Projeto | Papel na Arquitetura Hexagonal | Conteúdo (exemplos reais) |
+|---|---|---|
+| `*.Domain` | **Núcleo de negócio** (hexágono) — entidades, value objects, invariantes | `PropostaSeguro`, `ApoliceSeguro`, `AnaliseRisco`, `Monetario`, `Vigencia`, `DocumentoIdentificacao` |
+| `*.Application` (Use Cases) | **Portas de entrada** (*driving ports*) — casos de uso que orquestram o domínio | `CriarPropostaUseCase`, `CriarContratacaoUseCase`, `ConsultarAnalisePorPropostaUseCase` |
+| `*.Application/Ports` | **Portas de saída** (*driven ports*) — interfaces que o domínio/aplicação precisam, sem saber como são implementadas | `IPropostaRepository`, `IContratacaoRepository`, `IEventPublisher`, `IUnitOfWork`, `IRiskAssessmentPort`, `IPropostaVerificationPort`, `IIdempotencyStore` |
+| `*.Infrastructure` | **Adaptadores de saída** (*driven adapters*) — implementações concretas das portas de saída | Repositórios EF Core, `HttpPropostaVerificationAdapter`, `AnthropicRiskAssessmentAdapter`, publisher MassTransit |
+| `*.Api` (Controllers) | **Adaptadores de entrada** (*driving adapters*) — traduzem HTTP em chamadas aos Use Cases | `PropostasController`, `ContratacoesController`, `AnalisesController` |
+| `*.Api` (Filters/Middleware) | **Adaptadores de entrada transversais** — cross-cutting concerns na borda do hexágono | `FluentValidationFilter`, `DomainExceptionHandler`, autenticação JWT Bearer |
+
+---
+
+## 📦 Estrutura do Projeto
+
+```mermaid
+graph TD
+    Root["InsurancePlatformV01/"]
+
+    Root --> Src["src/"]
+    Root --> Tests["tests/"]
+    Root --> Docs["docs/"]
+    Root --> Gh[".github/workflows/"]
+
+    Src --> BB["BuildingBlocks.Contracts/<br/>(Events, Authorization Policies)"]
+    Src --> P["Proposta/"]
+    Src --> C["Contratacao/"]
+    Src --> A["Analise/"]
+
+    P --> P1["Proposta.Domain"]
+    P --> P2["Proposta.Application"]
+    P --> P3["Proposta.Infrastructure"]
+    P --> P4["Proposta.Api"]
+    P --> P5["Proposta.Migrator"]
+
+    C --> C1["Contratacao.Domain"]
+    C --> C2["Contratacao.Application"]
+    C --> C3["Contratacao.Infrastructure"]
+    C --> C4["Contratacao.Api"]
+    C --> C5["Contratacao.Migrator"]
+
+    A --> A1["Analise.Domain"]
+    A --> A2["Analise.Application"]
+    A --> A3["Analise.Infrastructure"]
+    A --> A4["Analise.Api"]
+    A --> A5["Analise.Migrator"]
+
+    Tests --> T1["Proposta.UnitTests / .IntegrationTests"]
+    Tests --> T2["Contratacao.UnitTests / .IntegrationTests"]
+    Tests --> T3["Analise.UnitTests / .IntegrationTests"]
+    Tests --> T4["Architecture.Tests"]
+
+    Docs --> D1["sql/ (scripts DDL)"]
+    Docs --> D2["postman/ (collection)"]
+
+    style Root fill:#ECEFF1,stroke:#37474F,stroke-width:2px
+    style Src fill:#E3F2FD,stroke:#1976D2
+    style Tests fill:#FFF3E0,stroke:#F57C00
+    style Docs fill:#E8F5E9,stroke:#388E3C
+```
+
+Cada serviço (`Proposta`, `Contratacao`, `Analise`) segue a mesma estrutura interna de 4 camadas + 1 job de migração — ver detalhamento na seção seguinte.
+
+---
+
+## 🧩 Camada, Subcamada e Responsabilidade
+
+| Camada | Subcamada | Responsabilidade |
+|---|---|---|
+| **Domain** | Proposta.Domain | Entidade `PropostaSeguro`, enums `StatusProposta`/`TipoSeguro`, value objects (`Monetario`, `DocumentoIdentificacao`) |
+| **Domain** | Contratacao.Domain | Entidade `ApoliceSeguro`, value objects (`Monetario`, `Vigencia`) |
+| **Domain** | Analise.Domain | Entidade `AnaliseRisco`, enums `StatusAnalise`/`Recomendacao` |
+| **Application** | UseCases | Orquestração de casos de uso (`CriarPropostaUseCase`, `AtualizarPropostaUseCase`, `DeletarPropostaUseCase`, `ListarPropostasUseCase`, `ObterPropostaPorIdUseCase`, e equivalentes em Contratacao/Analise) |
+| **Application** | Validators | Regras de validação de entrada declaradas com FluentValidation (`CriarPropostaCommandValidator`, `CriarContratacaoRequestValidator`, etc.) |
+| **Application** | Ports | Contratos (interfaces) que a Infrastructure implementa (`IPropostaRepository`, `IEventPublisher`, `IRiskAssessmentPort`, ...) |
+| **Application** | Dtos/Contracts | Objetos de transporte de dados e comandos (`CriarPropostaCommand`, `PropostaDto`, `AnaliseDto`, ...) |
+| **Infrastructure** | Persistence | `DbContext` do EF Core, configurações de mapeamento, migrations |
+| **Infrastructure** | Messaging | Publisher de eventos e consumers MassTransit (ex.: `PropostaCriadaEventConsumer`) |
+| **Infrastructure** | Http | Adaptadores HTTP resilientes (`HttpPropostaVerificationAdapter`) |
+| **Infrastructure** | Ai | Adaptador da API da Anthropic (`AnthropicRiskAssessmentAdapter`) |
+| **Infrastructure** | DependencyInjection | Registro de serviços (`AddPropostaInfrastructure`, etc.) |
+| **Api** | Controllers | Endpoints HTTP (`PropostasController`, `ContratacoesController`, `AnalisesController`) |
+| **Api** | Filters | `FluentValidationFilter` (validação automática de todo `ActionArgument` com validator registrado) |
+| **Api** | Middleware | `DomainExceptionHandler` (mapeia exceções de domínio para `ProblemDetails`/status HTTP) |
+| **Migrator** | — | Aplicativo console que roda `Database.MigrateAsync()` com o usuário `*_migrator` (permissão de DDL), separado do usuário de runtime da API |
+
+---
+
+## 🚀 Como Executar
+
+### Pré-requisitos
+- **.NET 10 SDK** ou superior
+- **Docker & Docker Compose** (recomendado)
+- **Git**
+
+### Com Docker (Recomendado)
 
 ```bash
+# 1. Clone o repositório
+git clone https://github.com/marcelohori/InsurancePlatformV01.git
+cd InsurancePlatformV01
+
+# 2. Configure variáveis de ambiente (copie de exemplo)
+cp .env.example .env
+# Edite .env com seus valores sensíveis (JWT_SIGNING_KEY, ANTHROPIC_API_KEY, senhas de banco)
+
+# 3. Suba o ambiente completo (Postgres, RabbitMQ, migrators e as 3 APIs)
 docker compose up --build
+
+# 4. Health check de cada serviço
+curl http://localhost:5080/health/live   # Proposta
+curl http://localhost:5081/health/live   # Contratacao
+curl http://localhost:5082/health/live   # Analise
 ```
 
-Isso sobe Postgres, RabbitMQ e os três serviços. Antes de cada API iniciar, o respectivo job `*-migrator` roda uma vez e aplica as migrations pendentes (ver seção "Migrations" abaixo); se você já tem um volume `postgres-data` de uma versão anterior deste projeto (sem os roles `*_migrator`/`*_app`), rode `docker compose down -v` primeiro para que o script de inicialização os crie.
+> Em Docker, os serviços rodam em `ASPNETCORE_ENVIRONMENT=Production` por padrão (nenhuma variável de ambiente a define diferente no `docker-compose.yml`), então os documentos OpenAPI (`/openapi/v1.json`) só ficam disponíveis rodando localmente com `dotnet run` (perfil `Development`) — ver [Endpoints e Acessos](#-endpoints-e-acessos).
 
-Cada serviço expõe endpoints de liveness/readiness:
+### Sem Docker (Desenvolvimento Local)
 
 ```bash
-curl http://localhost:5080/health/ready   # Proposta.Api
-curl http://localhost:5081/health/ready   # Contratacao.Api
-curl http://localhost:5082/health/ready   # Analise.Api
+# 1. Suba apenas a infraestrutura (Postgres + RabbitMQ) via Docker...
+docker compose up postgres rabbitmq
+# ...ou aponte as connection strings em appsettings.Development.json para instâncias locais já existentes.
+
+# 2. Restaure e compile
+dotnet restore InsurancePlatformV01.slnx
+dotnet build InsurancePlatformV01.slnx
+
+# 3. Aplique as migrations de cada serviço (usuário com permissão de DDL)
+dotnet run --project src/Proposta/Proposta.Migrator
+dotnet run --project src/Contratacao/Contratacao.Migrator
+dotnet run --project src/Analise/Analise.Migrator
+
+# 4. Rode cada API em um terminal separado (perfil "Development" do launchSettings.json)
+dotnet run --project src/Proposta/Proposta.Api
+dotnet run --project src/Contratacao/Contratacao.Api
+dotnet run --project src/Analise/Analise.Api
 ```
 
-Configuração e variáveis relevantes
-- Variáveis de ambiente usadas pelo docker-compose e pelas APIs:
-  - ConnectionStrings__AnaliseDb, ConnectionStrings__PropostaDb, ConnectionStrings__ContratacaoDb (usuário `*_app`, DML apenas)
-  - ConnectionStrings__PropostaDbMigrator, ConnectionStrings__ContratacaoDbMigrator, ConnectionStrings__AnaliseDbMigrator (usuário `*_migrator`, DDL - usadas só pelos jobs `*.Migrator`)
-  - RabbitMq__Host, RabbitMq__Port, RabbitMq__Username, RabbitMq__Password
-  - Jwt__Issuer, Jwt__Audience, Jwt__SigningKey (mínimo recomendado: 32 bytes)
-  - Anthropic__ApiKey, Anthropic__Model
-  - RunMigrationsOnStartup (bool) - só tem efeito quando `ASPNETCORE_ENVIRONMENT=Development`; ver seção "Migrations" abaixo
+### Configuração de Ambiente
 
-Execução sem Docker (desenvolvimento)
+Variáveis importantes em `.env` (usadas pelo `docker-compose.yml`):
 
-  dotnet restore
-  dotnet build InsurancePlatformV01.slnx
+```bash
+# Database
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres_pw_change_me
 
-  # iniciar serviços (cada um em um terminal separado)
-  dotnet run --project src/Proposta/Proposta.Api
-  dotnet run --project src/Contratacao/Contratacao.Api
-  dotnet run --project src/Analise/Analise.Api
+# RabbitMQ
+RABBITMQ_USER=insurance
+RABBITMQ_PASSWORD=insurance_pw_change_me
 
-Testes
-- Unit tests:
-  dotnet test tests/Proposta.UnitTests
-  dotnet test tests/Contratacao.UnitTests
-  dotnet test tests/Analise.UnitTests
-- Integration tests (requer Docker/Testcontainers):
-  dotnet test tests/Proposta.IntegrationTests
-  dotnet test tests/Contratacao.IntegrationTests
-  dotnet test tests/Analise.IntegrationTests
+# JWT (compartilhado pelos 3 serviços)
+JWT_ISSUER=InsurancePlatformV01
+JWT_AUDIENCE=InsurancePlatformV01
+JWT_SIGNING_KEY=your-256bit-key-at-least-32-bytes-minimum
 
-CI/CD Pipeline (GitHub Actions)
-
-Cada push para `main` ou `develop` e todo PR dispara automaticamente:
-
-1. **Build & Test** — Compila a solução, executa testes unitários e de integração
-2. **Code Quality** — Análise estática com CodeQL (detecção de vulnerabilidades)
-3. **Docker Build** — Constrói as 3 imagens de API (validação de Dockerfile)
-4. **Test Report** — Publica resultados dos testes no GitHub
-
-Workflow definido em `.github/workflows/ci.yml`. Status visível no badge acima.
-
-Qualidade de código
-
-- Format: `dotnet format --verify-no-changes InsurancePlatformV01.slnx`
-- Build: `dotnet build InsurancePlatformV01.slnx`
-- Vulnerabilidades: `dotnet list package --vulnerable` (executar periodicamente)
-- A solução inclui analisadores (.NET analyzers, StyleCop) via Directory.Build.props
-- CodeQL automatizado a cada push (GitHub Actions)
-
-Migrations
-- Cada serviço (Proposta, Contratacao, Analise) tem um projeto `*.Migrator` (`src/<Serviço>/<Serviço>.Migrator`) - um console app que só aplica `Database.MigrateAsync()` e sai; nunca é executado pela API.
-- Os `Program.cs` das APIs **não** aplicam migrations em produção. O bloco `MigrateAsync()` só roda quando `ASPNETCORE_ENVIRONMENT=Development` **e** `RunMigrationsOnStartup=true` (já habilitado em `appsettings.Development.json`, para `dotnet run` local sem depender do Docker) - ambas as condições são checadas para que a flag nunca tenha efeito fora de Development, mesmo se definida por engano.
-- Em produção/staging, rode o migrator explicitamente **antes** de subir/atualizar as réplicas da API, como um step de pipeline:
-  ```bash
-  docker compose run --rm proposta-migrator
-  docker compose run --rm contratacao-migrator
-  docker compose run --rm analise-migrator
-  ```
-  (em `docker compose up`, o `depends_on: ... condition: service_completed_successfully` já faz isso automaticamente uma vez, por conveniência local.)
-- Coordenação: cada `*.Migrator` adquire um `pg_advisory_lock` antes de aplicar migrations e libera ao final - protege contra duas execuções concorrentes do mesmo job (ex.: retry de pipeline) tentando alterar o schema ao mesmo tempo.
-- Usuários de banco: `docker/postgres-init/init-databases.sh` cria dois roles Postgres por serviço - `<serviço>_migrator` (owner do schema, único com permissão de DDL, usado só pelo Migrator) e `<serviço>_app` (somente SELECT/INSERT/UPDATE/DELETE, usado pela API em runtime). `ALTER DEFAULT PRIVILEGES` garante que tabelas criadas por futuras migrations já nasçam com DML liberado para o `_app`, sem regrant manual. Em produção real, esses roles/senhas devem ser provisionados pela infraestrutura (Terraform/DBA) e injetados via secrets manager, não pelo script de bootstrap do docker-compose (que só roda uma vez, no primeiro start de um volume vazio).
-
-Observações operacionais e recomendações de segurança
-- Não comitar segredos: appsettings.json e docker-compose possuem valores de exemplo. Use secrets manager (Azure Key Vault, HashiCorp, GitHub Secrets) ou dotnet user-secrets para desenvolvimento.
-- JWT Signing Key: use chave forte (>32 bytes) em produção e roteie via secrets manager.
-- Anthropic adapter: exige `Anthropic:ApiKey`. Em ambientes sem chave, configure um adapter noop/mock para evitar falha na inicialização.
-- Health endpoints estão expostos sem autenticação — proteja por rede ou auth em produção.
-- Evitar async-over-sync: há usos de `CreateConnectionAsync().GetAwaiter().GetResult()` em pontos de inicialização/health that devem ser revisados.
-
-Observabilidade
-- Serilog para logs estruturados; configure redaction para campos sensíveis.
-- OpenTelemetry (OTLP) configurado; use variáveis `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_HEADERS` para apontar collector.
-
-Estrutura do repositório
-
-```
-src/
-  BuildingBlocks/Contracts/
-  Proposta/    Proposta.Domain | Proposta.Application | Proposta.Infrastructure | Proposta.Api
-  Contratacao/ Contratacao.Domain | Contratacao.Application | Contratacao.Infrastructure | Contratacao.Api
-  Analise/     Analise.Domain | Analise.Application | Analise.Infrastructure | Analise.Api
-tests/
-  *.UnitTests
-  *.IntegrationTests
-  Architecture.Tests
+# IA (Anthropic) — usado apenas pelo Analise.Api
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-haiku-4-5-20251001
 ```
 
-Contribuição
-- Abra uma issue para discutir mudanças.
-- Faça fork, branch e PR; garanta que `dotnet build` e testes passem.
+---
 
-Licença
-- Ver arquivo LICENSE (se presente) ou contate o mantenedor.
+## 🔌 Endpoints e Acessos
 
-Referências e documentação adicional
-- `openspec/changes/add-proposta-contratacao-platform` contém decisões arquiteturais e tarefas relacionadas ao change.
+### Serviços e URLs
+
+| Serviço | URL |
+|---|---|
+| Proposta.Api | `http://localhost:5080` |
+| Contratacao.Api | `http://localhost:5081` |
+| Analise.Api | `http://localhost:5082` |
+| OpenAPI JSON (Proposta, apenas `dotnet run`/Development) | `http://localhost:5080/openapi/v1.json` |
+| OpenAPI JSON (Contratacao, apenas `dotnet run`/Development) | `http://localhost:5081/openapi/v1.json` |
+| OpenAPI JSON (Analise, apenas `dotnet run`/Development) | `http://localhost:5082/openapi/v1.json` |
+| PostgreSQL (interno à rede Docker) | `postgres:5432` |
+| RabbitMQ AMQP (interno à rede Docker) | `rabbitmq:5672` |
+| RabbitMQ Management UI (interno; acesse via `docker exec`) | `rabbitmq:15672` |
+
+> Nenhum dos três serviços expõe uma UI Swagger — apenas o documento OpenAPI cru (`Microsoft.AspNetCore.OpenApi`, sem Swashbuckle), e somente quando rodando em ambiente `Development`. Para explorar/testar os endpoints manualmente, use a [Postman Collection](docs/postman/InsurancePlatformV01.postman_collection.json).
+
+### Autenticação
+
+Todos os endpoints de negócio exigem um **JWT Bearer** assinado com `Jwt:SigningKey` (HMAC-SHA256), com claims de `role` (`usuario`, `analista` ou `admin`) e `NameIdentifier`. Não há endpoint de login nesta plataforma de referência — para testes manuais, gere um token com o mesmo `iss`/`aud`/chave configurados no `.env`, por exemplo com [jwt.io](https://jwt.io) ou um pequeno script usando `System.IdentityModel.Tokens.Jwt` (veja `tests/*/JwtTestTokenFactory.cs` como modelo).
+
+| Papel | Pode |
+|---|---|
+| `usuario` | Criar e listar/ver as próprias propostas |
+| `analista` | Tudo que `usuario` pode, além de aprovar/rejeitar propostas e criar contratações |
+| `admin` | Tudo que `analista` pode, em qualquer proposta/contratação |
+
+### Proposta.Api — `/api/v1.0/propostas`
+
+| Método | Rota | Descrição | Status |
+|---|---|---|---|
+| `POST` | `/api/v1.0/propostas` | Cria uma proposta (papel `usuario`/`analista`/`admin`) | `201`, `400`, `401` |
+| `GET` | `/api/v1.0/propostas?pagina=&tamanhoPagina=` | Lista propostas paginadas (usuário vê só as suas; `analista`/`admin` veem todas) | `200`, `401` |
+| `GET` | `/api/v1.0/propostas/{id}` | Obtém uma proposta por Id | `200`, `404` |
+| `PUT` | `/api/v1.0/propostas/{id}` | Atualiza uma proposta, incl. mudança de status (papel `analista`/`admin`) | `200`, `400`, `403`, `404` |
+| `DELETE` | `/api/v1.0/propostas/{id}` | Remove uma proposta (bloqueado se já houver contratação) | `204`, `404`, `409` |
+| `GET` | `/health/live` | Liveness (sem verificação de dependências) | `200` |
+| `GET` | `/health/ready` | Readiness (Postgres + RabbitMQ), requer autenticação | `200`, `401`, `503` |
+
+### Contratacao.Api — `/api/v1.0/contratacoes`
+
+| Método | Rota | Descrição | Status |
+|---|---|---|---|
+| `POST` | `/api/v1.0/contratacoes` | Contrata uma proposta `Aprovada` (papel `analista`/`admin`); header opcional `Idempotency-Key` (UUID v4) | `201`, `400`, `404`, `409` |
+| `GET` | `/api/v1.0/contratacoes?pagina=&tamanhoPagina=` | Lista contratações paginadas | `200`, `401` |
+| `GET` | `/api/v1.0/contratacoes/{id}` | Obtém uma contratação por Id | `200`, `404` |
+| `PUT` | `/api/v1.0/contratacoes/{id}` | Atualiza vigência/prêmio/status de uma contratação (papel `analista`/`admin`) | `200`, `400`, `404` |
+| `DELETE` | `/api/v1.0/contratacoes/{id}` | Remove uma contratação (papel `analista`/`admin`) | `204`, `404` |
+| `GET` | `/health/live` | Liveness | `200` |
+| `GET` | `/health/ready` | Readiness (Postgres + RabbitMQ), requer autenticação | `200`, `401`, `503` |
+
+### Analise.Api — `/api/v1.0/propostas`
+
+| Método | Rota | Descrição | Status |
+|---|---|---|---|
+| `GET` | `/api/v1.0/propostas/{propostaId}/analise` | Consulta o resultado da avaliação de risco de uma proposta | `200`, `404` |
+| `GET` | `/health/live` | Liveness | `200` |
+| `GET` | `/health/ready` | Readiness (Postgres + RabbitMQ), requer autenticação | `200`, `401`, `503` |
+
+---
+
+## 🗄️ Script SQL
+
+Os scripts DDL completos e idempotentes de cada base foram gerados com `dotnet ef migrations script --idempotent` e estão versionados em [`docs/sql/`](docs/sql/):
+
+- [`proposta_schema.sql`](docs/sql/proposta_schema.sql)
+- [`contratacao_schema.sql`](docs/sql/contratacao_schema.sql)
+- [`analise_schema.sql`](docs/sql/analise_schema.sql)
+
+### Modelo de Dados
+
+```mermaid
+erDiagram
+    PROPOSTAS {
+        uuid id PK
+        varchar nome_segurado
+        varchar documento_segurado
+        varchar tipo_seguro
+        varchar status
+        numeric valor_cobertura
+        varchar valor_cobertura_moeda
+        numeric valor_premio
+        varchar valor_premio_moeda
+        varchar criado_por
+        timestamptz data_criacao
+    }
+
+    CONTRATACOES {
+        uuid id PK
+        uuid proposta_id "referência lógica (outro serviço/DB)"
+        varchar numero_apolice UK
+        varchar status
+        date data_contratacao
+        date vigencia_inicio
+        date vigencia_fim
+        numeric valor_premio
+        varchar valor_premio_moeda
+    }
+
+    IDEMPOTENCY_RECORDS {
+        varchar chave PK
+        uuid contratacao_id
+        varchar hash_requisicao
+        timestamptz criado_em
+    }
+
+    ANALISES {
+        uuid id PK
+        uuid proposta_id UK "referência lógica (outro serviço/DB)"
+        varchar status
+        int score_risco "0-100, nullable até concluir"
+        varchar recomendacao "Aprovar / Rejeitar"
+        varchar justificativa
+        timestamptz data_criacao
+        timestamptz data_conclusao
+    }
+
+    PROPOSTAS ||--o| CONTRATACOES : "verificada via HTTP síncrono"
+    PROPOSTAS ||--o| ANALISES : "avaliada via evento assíncrono"
+    CONTRATACOES ||--o| IDEMPOTENCY_RECORDS : "idempotência do POST"
+```
+
+> `PROPOSTAS`, `CONTRATACOES` e `ANALISES` vivem em **bancos PostgreSQL diferentes** (`proposta_db`, `contratacao_db`, `analise_db`) — as relações acima são lógicas (validadas em runtime via HTTP/eventos), não FKs de banco. Cada base também contém as tabelas de infraestrutura do MassTransit (`OutboxState`, `OutboxMessage`, `InboxState`) usadas pelo *Transactional Outbox Pattern*, omitidas do diagrama por não fazerem parte do domínio de negócio.
+
+---
+
+## 🧪 Testes
+
+### Rodar Todos os Testes
+
+```bash
+dotnet test InsurancePlatformV01.slnx --verbosity normal
+```
+
+### Por Projeto
+
+```bash
+# Unit Tests (rápidos, sem infraestrutura externa)
+dotnet test tests/Proposta.UnitTests
+dotnet test tests/Contratacao.UnitTests
+dotnet test tests/Analise.UnitTests
+
+# Integration Tests (sobem Postgres + RabbitMQ reais via Testcontainers — requer Docker)
+dotnet test tests/Proposta.IntegrationTests
+dotnet test tests/Contratacao.IntegrationTests
+dotnet test tests/Analise.IntegrationTests
+
+# Architecture Tests (valida as regras de Clean/Hexagonal Architecture com NetArchTest.Rules)
+dotnet test tests/Architecture.Tests
+```
+
+### Resultado Esperado
+
+Suíte completa: **125 testes, 0 falhas**.
+
+| Projeto | Testes | Tipo |
+|---|---|---|
+| Proposta.UnitTests | 39 | Unit |
+| Proposta.IntegrationTests | 20 | Integration (Testcontainers) |
+| Contratacao.UnitTests | 23 | Unit |
+| Contratacao.IntegrationTests | 14 | Integration (Testcontainers + WireMock) |
+| Analise.UnitTests | 15 | Unit |
+| Analise.IntegrationTests | 5 | Integration (Testcontainers) |
+| Architecture.Tests | 9 | Regras de arquitetura (dependências, camadas) |
+| **Total** | **125** | — |
+
+```
+Aprovado! – Com falha: 0, Aprovado: 125, Ignorado: 0, Total: 125
+```
+
+---
+
+## 🤖 IA
+
+A avaliação de risco é feita pelo **Analise.Api** através do adaptador `AnthropicRiskAssessmentAdapter` (`src/Analise/Analise.Infrastructure/Ai/AnthropicRiskAssessmentAdapter.cs`), que implementa a porta de saída `IRiskAssessmentPort` — trocar de provedor de IA no futuro significa apenas escrever um novo adaptador, sem tocar no domínio ou nos casos de uso.
+
+### Como funciona
+
+1. Ao consumir `PropostaCriadaEvent`, o `PropostaCriadaEventConsumer` cria um registro `AnaliseRisco` com status `EmProcessamento`.
+2. O adaptador monta um prompt determinístico com os dados da proposta (tipo de seguro, valor de cobertura, valor de prêmio) e pede à **Anthropic Messages API** (`/v1/messages`, versão `2023-06-01`) uma resposta **apenas em JSON**, no formato `{"score": 0-100, "recomendacao": "Aprovar"|"Rejeitar", "justificativa": "..."}`.
+3. A chamada HTTP roda sob uma política de resiliência do `Microsoft.Extensions.Http.Resilience` (retry, timeout, circuit-breaker via Polly) — falhas de rede ou do provedor viram uma exceção de domínio (`RiskAssessmentIndisponivelException`), e a análise fica marcada como `Falha` em vez de travar o consumidor.
+4. A resposta é rigorosamente validada antes de ser persistida: `score` precisa estar entre 0 e 100, `recomendacao` precisa ser um valor válido do enum `Recomendacao`, e a `justificativa` não pode faltar nem ultrapassar 500 caracteres — qualquer desvio também vira `RiskAssessmentIndisponivelException`.
+5. O resultado fica disponível em `GET /api/v1.0/propostas/{propostaId}/analise`.
+
+### Importante: a IA é consultiva, não decisória
+
+O score e a recomendação da IA **não alteram automaticamente** o status da proposta. A decisão de aprovar ou rejeitar continua sendo de um humano com papel `analista`/`admin`, via `PUT /api/v1.0/propostas/{id}` no Proposta.Api — a IA existe para **subsidiar** essa decisão, não substituí-la. Isso mantém a responsabilidade final da subscrição com um humano, e evita que uma falha/alucinação do modelo aprove ou rejeite uma proposta sem supervisão.
+
+### Configuração
+
+```bash
+Anthropic__ApiKey=sk-ant-...
+Anthropic__Model=claude-haiku-4-5-20251001   # configurável por variável de ambiente
+```
+
+---
+
+## 🔒 Segurança & Qualidade
+
+### Segurança Implementada
+
+| Feature | Implementação |
+|---------|---------------|
+| **Autenticação** | JWT (HMAC-SHA256) com validação de issuer/audience/lifetime |
+| **Autorização** | Role-based policies (`usuario`, `analista`, `admin`) |
+| **Validação Input** | FluentValidation em todas as requests via filtro global (`FluentValidationFilter`) |
+| **Idempotência** | `POST /contratacoes` seguro para retry via header `Idempotency-Key` (UUID v4) |
+| **Database Users** | Roles separados por serviço (`*_migrator` com DDL, `*_app` com DML apenas) |
+| **HTTPS** | Enforcement em produção via `UseHsts()` |
+| **Secrets** | Nunca em código; via variáveis de ambiente / GitHub Secrets |
+
+### Controle de Qualidade
+
+| Verificação | Ferramenta | Gate |
+|---|---|---|
+| **Build** | `dotnet build` | Obrigatório ✅ |
+| **Testes** | xUnit + Testcontainers | Todos os 125 devem passar |
+| **Code Analysis** | .NET Analyzers, StyleCop | `TreatWarningsAsErrors=true` |
+| **Security Scan** | CodeQL | Verificado em CI |
+| **Architecture Rules** | NetArchTest.Rules | Sem dependências circulares/invertidas |
+| **Code Format** | `dotnet format` | Verificado em CI |
+
+---
+
+## 📊 CI/CD Pipeline
+
+O pipeline (`.github/workflows/ci.yml`) executa automaticamente em todo push para `main`/`develop` e em todo PR: **Build & Test** (unit + integration), **CodeQL** (security scan) e **Docker Build** (build das 3 imagens), publicando um relatório de testes ao final.
+
+---
+
+## 🤝 Contribuindo
+
+1. **Fork** o repositório
+2. **Crie uma branch** para sua feature (`git checkout -b feature/AmazingFeature`)
+3. **Commit** suas mudanças (`git commit -m 'Add some AmazingFeature'`)
+4. **Push** para a branch (`git push origin feature/AmazingFeature`)
+5. **Abra um Pull Request**
+
+Checklist antes de submeter PR: build sem warnings, todos os testes passando, `dotnet format --verify-no-changes`, testes para a nova funcionalidade, sem segredos commitados. Veja [CONTRIBUTION.md](CONTRIBUTION.md) para o guia completo.
+
+---
+
+## 📞 Suporte & Contato
+
+- **Issues**: [GitHub Issues](https://github.com/marcelohori/InsurancePlatformV01/issues)
+- **Email**: marcelohori@gmail.com
+
+---
+
+## 📄 Licença
+
+Este projeto é licenciado sob a licença MIT — veja [LICENSE](LICENSE) para detalhes.
+
+---
+
+<div align="center">
+
+**[⬆ voltar ao topo](#-insuranceplatformv01)**
+
+Feito com ❤️ por [Marcelo Hori](https://github.com/marcelohori)
+
+</div>

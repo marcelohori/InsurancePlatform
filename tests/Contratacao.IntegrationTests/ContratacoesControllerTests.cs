@@ -49,15 +49,19 @@ public class ContratacoesControllerTests : IDisposable
             .Given(Request.Create().WithPath($"/api/v1/propostas/{propostaId}").UsingGet())
             .RespondWith(Response.Create().WithStatusCode(404));
 
-    private static object CriarPayload(Guid propostaId) => new
+    private static object CriarPayload(Guid propostaId)
     {
-        propostaId,
-        dataContratacao = "2026-01-01",
-        dataInicioVigencia = (string?)null,
-        dataFimVigencia = (string?)null,
-        valorPremio = 1200m,
-        moedaValorPremio = (string?)null,
-    };
+        var hoje = DateOnly.FromDateTime(DateTime.UtcNow);
+        return new
+        {
+            propostaId,
+            dataContratacao = hoje.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            dataInicioVigencia = hoje.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            dataFimVigencia = hoje.AddYears(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            valorPremio = 1200m,
+            moedaValorPremio = "BRL",
+        };
+    }
 
     [Fact]
     public async Task Criar_Com_Proposta_Aprovada_Retorna_201_E_Persiste_Contratacao()
@@ -115,12 +119,13 @@ public class ContratacoesControllerTests : IDisposable
     {
         var propostaId = Guid.NewGuid();
         StubProposta(propostaId, "Aprovada");
+        var idempotencyKey = Guid.NewGuid().ToString();
 
         using var primeiraRequisicao = new HttpRequestMessage(HttpMethod.Post, "/api/v1/contratacoes")
         {
             Content = JsonContent.Create(CriarPayload(propostaId)),
         };
-        primeiraRequisicao.Headers.Add("Idempotency-Key", "chave-teste-1");
+        primeiraRequisicao.Headers.Add("Idempotency-Key", idempotencyKey);
         var primeiraResposta = await _client.SendAsync(primeiraRequisicao);
         var primeiraContratacao = await primeiraResposta.Content.ReadFromJsonAsync<ContratacaoDto>(JsonOptions);
 
@@ -128,7 +133,7 @@ public class ContratacoesControllerTests : IDisposable
         {
             Content = JsonContent.Create(CriarPayload(propostaId)),
         };
-        segundaRequisicao.Headers.Add("Idempotency-Key", "chave-teste-1");
+        segundaRequisicao.Headers.Add("Idempotency-Key", idempotencyKey);
         var segundaResposta = await _client.SendAsync(segundaRequisicao);
         var segundaContratacao = await segundaResposta.Content.ReadFromJsonAsync<ContratacaoDto>(JsonOptions);
 

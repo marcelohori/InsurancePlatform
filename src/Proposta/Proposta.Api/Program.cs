@@ -4,6 +4,7 @@ using Asp.Versioning;
 using BuildingBlocks.Contracts.Authorization;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Proposta.Api.Filters;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Metrics;
@@ -26,10 +27,10 @@ builder.Services
     .AddPropostaApplication();
 
 builder.Services
-    .AddValidatorsFromAssembly(typeof(Program).Assembly);
+    .AddValidatorsFromAssembly(typeof(Proposta.Application.Validators.CriarPropostaCommandValidator).Assembly);
 
 builder.Services
-    .AddControllers()
+    .AddControllers(options => options.Filters.Add<FluentValidationFilter>())
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 builder.Services.AddOpenApi();
