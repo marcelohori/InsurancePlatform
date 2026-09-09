@@ -19,9 +19,9 @@
     <!-- Messaging: pinned to the last Apache-2.0-licensed v8 line - MassTransit v9 requires a
          commercial license key (MT_LICENSE) even to start the bus, which does not fit this
          project's free/open-source scope. -->
-    <PackageVersion Include="MassTransit" Version="8.5.10" />
+    <PackageVersion Include="MassTransit" Version="9.2.1" />
     <PackageVersion Include="MassTransit.RabbitMQ" Version="8.5.10" />
-    <PackageVersion Include="MassTransit.EntityFrameworkCore" Version="8.5.10" />
+    <PackageVersion Include="MassTransit.EntityFrameworkCore" Version="9.2.1" />
     <!-- Resilience -->
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="9.10.0" />
     <!-- ASP.NET Core extras -->
