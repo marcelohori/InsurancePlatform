@@ -1,4 +1,4 @@
-﻿using BuildingBlocks.Contracts.Errors;
+using BuildingBlocks.Contracts.Errors;
 using Contratacao.Application.Exceptions;
 using Contratacao.Domain.Exceptions;
 using Microsoft.AspNetCore.Diagnostics;
@@ -8,63 +8,51 @@ using Serilog;
 namespace Contratacao.Api.Middleware;
 
 /// <summary>Translates domain/application exceptions into the shared Problem Details error contract.</summary>
-public sealed class DomainExceptionHandler(IProblemDetailsService problemDetailsService) : IExceptionHandler
+public sealed class DomainExceptionHandler : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        if (exception is not ContratacaoNaoEncontradaException
-            and not PropostaNaoEncontradaException
-            and not PropostaNaoAprovadaException
-            and not PropostaServiceIndisponivelException
-            and not ConflictDomainException
-            and not DomainException)
+        var (statusCode, type, title, detail) = exception switch
         {
-            Log.Error(exception, "Erro inesperado ao processar a requisição {Method} {Path}.",
-                httpContext.Request.Method, httpContext.Request.Path);
-
-            httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
-            return await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
-            {
-                HttpContext = httpContext,
-                ProblemDetails = new ProblemDetails
-                {
-                    Status = StatusCodes.Status500InternalServerError,
-                    Type = "https://httpstatuses.com/500",
-                    Title = "Erro interno do servidor",
-                    Detail = "Ocorreu um erro inesperado ao processar a requisição.",
-                },
-            });
-        }
-
-        var (statusCode, type, title) = exception switch
-        {
-            ContratacaoNaoEncontradaException => (StatusCodes.Status404NotFound, ProblemTypes.NotFound, "Recurso não encontrado"),
-            PropostaNaoEncontradaException => (StatusCodes.Status404NotFound, ProblemTypes.NotFound, "Proposta não encontrada"),
-            PropostaNaoAprovadaException => (StatusCodes.Status409Conflict, ProblemTypes.Conflict, "Proposta não aprovada"),
-            PropostaServiceIndisponivelException => (StatusCodes.Status503ServiceUnavailable, ProblemTypes.ServiceUnavailable, "Serviço de propostas indisponível"),
-            ConflictDomainException => (StatusCodes.Status409Conflict, ProblemTypes.Conflict, "Conflito de estado"),
-            DomainException => (StatusCodes.Status400BadRequest, ProblemTypes.ValidationError, "Dado inválido"),
-            _ => (0, string.Empty, string.Empty),
+            ContratacaoNaoEncontradaException => (StatusCodes.Status404NotFound, ProblemTypes.NotFound, "Recurso não encontrado", exception.Message),
+            PropostaNaoEncontradaException => (StatusCodes.Status404NotFound, ProblemTypes.NotFound, "Proposta não encontrada", exception.Message),
+            PropostaNaoAprovadaException => (StatusCodes.Status409Conflict, ProblemTypes.Conflict, "Proposta não aprovada", exception.Message),
+            PropostaServiceIndisponivelException => (StatusCodes.Status503ServiceUnavailable, ProblemTypes.ServiceUnavailable, "Serviço de propostas indisponível", exception.Message),
+            ConflictDomainException => (StatusCodes.Status409Conflict, ProblemTypes.Conflict, "Conflito de estado", exception.Message),
+            DomainException => (StatusCodes.Status400BadRequest, ProblemTypes.ValidationError, "Dado inválido", exception.Message),
+            _ => (0, string.Empty, string.Empty, string.Empty),
         };
 
         if (statusCode == 0)
         {
-            return false;
+            Log.Error(exception, "Erro inesperado ao processar a requisição {Method} {Path}.",
+                httpContext.Request.Method, httpContext.Request.Path);
+
+            statusCode = StatusCodes.Status500InternalServerError;
+            type = "https://httpstatuses.com/500";
+            title = "Erro interno do servidor";
+            detail = "Ocorreu um erro inesperado ao processar a requisição.";
         }
 
         httpContext.Response.StatusCode = statusCode;
 
-        return await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
-        {
-            HttpContext = httpContext,
-            Exception = exception,
-            ProblemDetails = new ProblemDetails
+        // Written directly as JSON (not via IProblemDetailsService.TryWriteAsync) so the client
+        // always gets the real error detail. The negotiated writer silently drops Detail when
+        // the request's Accept header doesn't include application/json - e.g. Swagger UI sends
+        // "Accept: text/plain" by default, which made every error response come back as a bare
+        // {type,title,status} with no explanation of what actually went wrong.
+        await httpContext.Response.WriteAsJsonAsync(
+            new ProblemDetails
             {
                 Status = statusCode,
                 Type = type,
                 Title = title,
-                Detail = exception is DomainException ? exception.Message : title,
+                Detail = detail,
             },
-        });
+            options: null,
+            contentType: "application/problem+json",
+            cancellationToken: cancellationToken);
+
+        return true;
     }
 }

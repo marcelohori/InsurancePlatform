@@ -8,8 +8,12 @@
 # fechadas de propósito (Postgres e RabbitMQ só devem ser acessíveis de dentro da rede Docker).
 services:
   postgres:
+    # Host port 5433 (não 5432) porque 5432 pode já estar ocupado por outra instância de
+    # Postgres na sua máquina (outro projeto, um Postgres instalado localmente, etc.) - dentro
+    # da rede Docker os outros serviços deste projeto continuam falando com "postgres:5432"
+    # normalmente, isso só muda como você acessa do host (dotnet run, psql local).
     ports:
-      - "5432:5432"
+      - "5433:5432"
 
   rabbitmq:
     ports:

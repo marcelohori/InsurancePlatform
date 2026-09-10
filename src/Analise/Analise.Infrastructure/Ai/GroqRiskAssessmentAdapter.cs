@@ -10,42 +10,43 @@ using Polly.Timeout;
 namespace Analise.Infrastructure.Ai;
 
 /// <summary>
-/// Calls the Anthropic Messages API to produce an advisory risk score/recommendation for a
-/// proposal. Resilience (retry, timeout, circuit breaker) is configured on the named HttpClient
-/// via Microsoft.Extensions.Http.Resilience, not here - this adapter only translates the outcome.
+/// Calls the Groq API (OpenAI-compatible chat completions) to produce an advisory risk
+/// score/recommendation for a proposal - a free-tier alternative to Anthropic for local testing,
+/// selected via the "Analise:Provider" configuration. Same resilience/response-contract pattern
+/// as <see cref="AnthropicRiskAssessmentAdapter"/>; only the request/response envelope differs.
 /// </summary>
-public sealed class AnthropicRiskAssessmentAdapter : IRiskAssessmentPort
+public sealed class GroqRiskAssessmentAdapter : IRiskAssessmentPort
 {
-    private const string AnthropicVersion = "2023-06-01";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
     private readonly string _model;
 
-    public AnthropicRiskAssessmentAdapter(HttpClient httpClient, IConfiguration configuration)
+    public GroqRiskAssessmentAdapter(HttpClient httpClient, IConfiguration configuration)
     {
         _httpClient = httpClient;
-        _apiKey = configuration["Anthropic:ApiKey"]
-            ?? throw new InvalidOperationException("Configuração 'Anthropic:ApiKey' não definida.");
-        _model = configuration["Anthropic:Model"] ?? "claude-haiku-4-5-20251001";
+        _apiKey = configuration["Groq:ApiKey"]
+            ?? throw new InvalidOperationException("Configuração 'Groq:ApiKey' não definida.");
+        _model = configuration["Groq:Model"] ?? "qwen/qwen3.8-27b";
     }
 
     public async Task<RiskAssessmentResult> AvaliarAsync(RiskAssessmentInput input, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/v1/messages")
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/openai/v1/chat/completions")
         {
             Content = JsonContent.Create(
                 new
                 {
                     model = _model,
                     max_tokens = 300,
+                    temperature = 0,
+                    response_format = new { type = "json_object" },
                     messages = new[] { new { role = "user", content = RiskAssessmentJsonContract.MontarPrompt(input) } },
                 },
                 options: JsonOptions),
         };
-        request.Headers.Add("x-api-key", _apiKey);
-        request.Headers.Add("anthropic-version", AnthropicVersion);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
 
         HttpResponseMessage response;
         try
@@ -64,28 +65,30 @@ public sealed class AnthropicRiskAssessmentAdapter : IRiskAssessmentPort
                 new HttpRequestException($"Resposta HTTP inesperada: {(int)response.StatusCode} ({response.ReasonPhrase})."));
         }
 
-        AnthropicResponse? payload;
+        GroqResponse? payload;
         try
         {
-            payload = await response.Content.ReadFromJsonAsync<AnthropicResponse>(JsonOptions, cancellationToken);
+            payload = await response.Content.ReadFromJsonAsync<GroqResponse>(JsonOptions, cancellationToken);
         }
         catch (JsonException ex)
         {
             throw new RiskAssessmentIndisponivelException("Resposta inválida do provedor de IA.", ex);
         }
-        var texto = payload?.Content?.FirstOrDefault(c => c.Type == "text")?.Text;
+        var texto = payload?.Choices?.FirstOrDefault()?.Message?.Content;
 
         if (string.IsNullOrWhiteSpace(texto))
         {
             throw new RiskAssessmentIndisponivelException(
                 "Resposta vazia do provedor de IA.",
-                new InvalidOperationException("Empty content in Anthropic response."));
+                new InvalidOperationException("Empty content in Groq response."));
         }
 
         return RiskAssessmentJsonContract.InterpretarResposta(texto);
     }
 
-    private sealed record AnthropicResponse(List<AnthropicContentBlock>? Content);
+    private sealed record GroqResponse(List<GroqChoice>? Choices);
 
-    private sealed record AnthropicContentBlock(string Type, string? Text);
+    private sealed record GroqChoice(GroqMessage? Message);
+
+    private sealed record GroqMessage(string? Content);
 }

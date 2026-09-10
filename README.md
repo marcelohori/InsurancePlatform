@@ -37,14 +37,14 @@
 
 InsurancePlatformV01 é uma plataforma de gestão de propostas e contratação de seguros, construída como **3 microsserviços independentes** (`Proposta`, `Contratacao`, `Analise`) que se comunicam via **REST síncrono** (verificação de proposta antes de contratar) e **eventos assíncronos** (avaliação de risco), cada um com sua própria base de dados PostgreSQL (*polyglot persistence*, um banco por serviço).
 
-O projeto foi desenvolvido como referência de boas práticas em **.NET 10**, aplicando **Arquitetura Hexagonal (Ports & Adapters)**, **Domain-Driven Design** e **Clean Architecture**, com foco em segurança (JWT + RBAC), resiliência (retry/circuit-breaker/timeout via Polly), observabilidade (Serilog + OpenTelemetry) e uma suíte de **128 testes automatizados** (unitários, integração com Testcontainers e regras de arquitetura).
+O projeto foi desenvolvido como referência de boas práticas em **.NET 10**, aplicando **Arquitetura Hexagonal (Ports & Adapters)**, **Domain-Driven Design** e **Clean Architecture**, com foco em segurança (JWT + RBAC), resiliência (retry/circuit-breaker/timeout via Polly), observabilidade (Serilog + OpenTelemetry) e uma suíte de **132 testes automatizados** (unitários, integração com Testcontainers e regras de arquitetura).
 
 ### Principais Funcionalidades
 
 | Funcionalidade | Descrição |
 |---|---|
 | **Gestão de Propostas** | CRUD completo de propostas de seguro (Auto, Vida, Residencial, Saúde), com controle de posse (usuário só vê/edita as próprias) |
-| **Avaliação de Risco com IA** | Toda proposta criada dispara, de forma assíncrona, uma avaliação de risco via **Anthropic API** (score 0-100, recomendação e justificativa) |
+| **Avaliação de Risco com IA** | Toda proposta criada dispara, de forma assíncrona, uma avaliação de risco (score 0-100, recomendação e justificativa) — provedor plugável: **Anthropic** (Claude, default) ou **Groq** (gratuito, para testes) |
 | **Contratação de Apólices** | Conversão de uma proposta **aprovada** em apólice, com verificação síncrona da proposta e suporte a idempotência (`Idempotency-Key`) |
 | **Autenticação e Autorização** | JWT Bearer + políticas baseadas em papéis (`usuario`, `analista`, `admin`) |
 | **Mensageria Confiável** | RabbitMQ + MassTransit com *Transactional Outbox Pattern* (garantia at-least-once) |
@@ -60,8 +60,8 @@ O projeto foi desenvolvido como referência de boas práticas em **.NET 10**, ap
 | **Banco por Serviço** | PostgreSQL isolado por microsserviço |
 | **API REST** | Versionamento explícito via `Asp.Versioning` (v1.0) |
 | **Segurança** | JWT + Role-based Authorization + Input Validation (FluentValidation) |
-| **Resiliência** | Circuit-breaker, retry, timeout policies via Polly (chamadas HTTP e Anthropic API) |
-| **Testes** | 128 testes (unit + integration com Testcontainers + regras de arquitetura) |
+| **Resiliência** | Circuit-breaker, retry, timeout policies via Polly (chamadas HTTP e ao provedor de IA) |
+| **Testes** | 132 testes (unit + integration com Testcontainers + regras de arquitetura) |
 | **DevOps Ready** | Docker Compose, GitHub Actions, Health Checks |
 
 ---
@@ -129,9 +129,12 @@ Todas as versões abaixo são as **efetivamente fixadas** em [`Directory.Package
 
 ### IA
 
+Provedor plugável via `Analise:Provider` — ver [seção IA](#-ia) para detalhes.
+
 | Tecnologia | Versão |
 |---|---|
-| Anthropic Messages API | `2023-06-01` (modelo padrão: `claude-haiku-4-5-20251001`, configurável) |
+| Anthropic Messages API (default) | `2023-06-01` (modelo padrão: `claude-haiku-4-5-20251001`, configurável) |
+| Groq API (gratuito, compatível com OpenAI) | Chat Completions (modelo padrão: `qwen/qwen3.8-27b`, configurável) |
 
 ### DevOps
 
@@ -381,6 +384,8 @@ curl http://localhost:5082/health/live   # Analise
 
 Os serviços `*.Migrator` e `*.Api` **não têm connection string default em `appsettings.json`** — leem tudo de variáveis de ambiente (`ConnectionStrings__*`, `RabbitMq__*`, `Jwt__*`), exatamente como em produção. Além disso, o `docker-compose.yml` deixa as portas do Postgres/RabbitMQ **fechadas por padrão** (só acessíveis de dentro da rede Docker) — então rodar as APIs fora do Docker exige um passo a mais para expor essas portas ao host.
 
+> `docker-compose.local.yml` expõe o Postgres do projeto na porta **5433** do host (não 5432) de propósito — 5432 é o default de qualquer instalação local de Postgres ou de outros projetos rodando em Docker na sua máquina, então usar 5433 evita um `Bind for 0.0.0.0:5432 failed: port is already allocated` (o container do projeto fica preso em `Created`, nunca sobe, e tudo que depende dele — incluindo `dotnet run` do Migrator/API — falha com "password authentication failed", já que a conexão acaba caindo em outro Postgres qualquer que esteja na 5432). Se mesmo assim a 5433 colidir na sua máquina, troque a porta em `docker-compose.local.yml` e nos comandos abaixo.
+
 ```powershell
 # 1. Suba só a infraestrutura (Postgres + RabbitMQ), com um overlay que expõe as portas ao host
 docker compose -f docker-compose.yml -f docker-compose.local.yml up -d postgres rabbitmq
@@ -392,13 +397,13 @@ dotnet build InsurancePlatformV01.slnx
 # 3. Aplique as migrations de cada serviço, usando o role "*_migrator" (tem permissão de DDL) -
 #    as senhas abaixo são os defaults de docker-compose.yml/.env.example; ajuste se você
 #    customizou *_MIGRATOR_PASSWORD no seu .env
-$env:ConnectionStrings__PropostaDbMigrator = "Host=localhost;Port=5432;Database=proposta_db;Username=proposta_migrator;Password=proposta_migrator"
+$env:ConnectionStrings__PropostaDbMigrator = "Host=localhost;Port=5433;Database=proposta_db;Username=proposta_migrator;Password=proposta_migrator"
 dotnet run --project src/Proposta/Proposta.Migrator
 
-$env:ConnectionStrings__ContratacaoDbMigrator = "Host=localhost;Port=5432;Database=contratacao_db;Username=contratacao_migrator;Password=contratacao_migrator"
+$env:ConnectionStrings__ContratacaoDbMigrator = "Host=localhost;Port=5433;Database=contratacao_db;Username=contratacao_migrator;Password=contratacao_migrator"
 dotnet run --project src/Contratacao/Contratacao.Migrator
 
-$env:ConnectionStrings__AnaliseDbMigrator = "Host=localhost;Port=5432;Database=analise_db;Username=analise_migrator;Password=analise_migrator"
+$env:ConnectionStrings__AnaliseDbMigrator = "Host=localhost;Port=5433;Database=analise_db;Username=analise_migrator;Password=analise_migrator"
 dotnet run --project src/Analise/Analise.Migrator
 
 # 4. Rode cada API em um terminal separado, com o role "*_app" (só DML) - ASPNETCORE_URLS
@@ -409,7 +414,7 @@ dotnet run --project src/Analise/Analise.Migrator
 #    não tem permissão de DDL, então a API derruba com "permission denied for schema public".
 #    Como o Migrator já aplicou tudo no passo 3, isso é seguro de desligar aqui.
 $env:RunMigrationsOnStartup = "false"
-$env:ConnectionStrings__PropostaDb = "Host=localhost;Port=5432;Database=proposta_db;Username=proposta_app;Password=proposta_app"
+$env:ConnectionStrings__PropostaDb = "Host=localhost;Port=5433;Database=proposta_db;Username=proposta_app;Password=proposta_app"
 $env:RabbitMq__Host = "localhost"
 $env:RabbitMq__Username = "insurance"
 $env:RabbitMq__Password = "insurance"
@@ -449,9 +454,11 @@ JWT_ISSUER=InsurancePlatformV01
 JWT_AUDIENCE=InsurancePlatformV01
 JWT_SIGNING_KEY=your-256bit-key-at-least-32-bytes-minimum
 
-# IA (Anthropic) — usado apenas pelo Analise.Api
+# IA — usado apenas pelo Analise.Api; ANALISE_PROVIDER escolhe o adaptador (ver seção IA)
+ANALISE_PROVIDER=Anthropic
 ANTHROPIC_API_KEY=sk-ant-...
 ANTHROPIC_MODEL=claude-haiku-4-5-20251001
+# ou, para testar de graça (ANALISE_PROVIDER=Groq): GROQ_API_KEY=gsk_... / GROQ_MODEL=qwen/qwen3.8-27b
 ```
 
 ---
@@ -674,47 +681,63 @@ dotnet test tests/Architecture.Tests
 
 ### Resultado Esperado
 
-Suíte completa: **128 testes, 0 falhas**.
+Suíte completa: **132 testes, 0 falhas**.
 
 | Projeto | Testes | Tipo |
 |---|---|---|
 | Proposta.UnitTests | 39 | Unit |
-| Proposta.IntegrationTests | 23 | Integration (Testcontainers) |
+| Proposta.IntegrationTests | 24 | Integration (Testcontainers) |
 | Contratacao.UnitTests | 23 | Unit |
 | Contratacao.IntegrationTests | 14 | Integration (Testcontainers + WireMock) |
 | Analise.UnitTests | 15 | Unit |
 | Analise.IntegrationTests | 5 | Integration (Testcontainers) |
 | Architecture.Tests | 9 | Regras de arquitetura (dependências, camadas) |
-| **Total** | **128** | — |
+| **Total** | **132** | — |
 
 ```
-Aprovado! – Com falha: 0, Aprovado: 128, Ignorado: 0, Total: 128
+Aprovado! – Com falha: 0, Aprovado: 132, Ignorado: 0, Total: 132
 ```
 
 ---
 
 ## 🤖 IA
 
-A avaliação de risco é feita pelo **Analise.Api** através do adaptador `AnthropicRiskAssessmentAdapter` (`src/Analise/Analise.Infrastructure/Ai/AnthropicRiskAssessmentAdapter.cs`), que implementa a porta de saída `IRiskAssessmentPort` — trocar de provedor de IA no futuro significa apenas escrever um novo adaptador, sem tocar no domínio ou nos casos de uso.
+A avaliação de risco é feita pelo **Analise.Api** através de um adaptador que implementa a porta de saída `IRiskAssessmentPort` (`src/Analise/Analise.Application/Ports/IRiskAssessmentPort.cs`) — trocar de provedor de IA significa só escrever um novo adaptador, sem tocar no domínio ou nos casos de uso. Dois adaptadores já existem prontos, e a escolha entre eles é **configuração, não código**:
+
+| Adaptador | Provedor | Custo | Quando usar |
+|---|---|---|---|
+| `AnthropicRiskAssessmentAdapter` (default) | Claude (Anthropic Messages API) | Pago (por token) | Produção / demonstração com a IA "de verdade" do projeto |
+| `GroqRiskAssessmentAdapter` | Groq (API compatível com OpenAI, modelos Llama) | **Grátis** (tier gratuito generoso, sem cartão) | Testes locais sem custo, sem precisar de uma chave da Anthropic |
+
+### Como escolher o provedor
+
+Variável `Analise:Provider` (`ANALISE_PROVIDER` no `.env`/Docker Compose): `Anthropic` (default) ou `Groq`. Só a configuração do provedor **selecionado** é validada no startup — deixar a do outro em branco não quebra nada.
+
+```bash
+# Opção grátis para testes (crie uma chave sem custo em https://console.groq.com/keys)
+ANALISE_PROVIDER=Groq
+GROQ_API_KEY=gsk_...
+GROQ_MODEL=qwen/qwen3.8-27b   # default se omitido
+
+# Opção paga (Claude) - continua sendo o default se ANALISE_PROVIDER não for definido
+ANALISE_PROVIDER=Anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-haiku-4-5-20251001   # default se omitido
+```
+
+Rodando via `dotnet run` (fora do Docker Compose), use as variáveis sem o prefixo `.env` (`$env:Analise__Provider`, `$env:Groq__ApiKey`, etc., seguindo o mesmo padrão `Seção__Chave` já usado para `Jwt__*`/`ConnectionStrings__*`).
 
 ### Como funciona
 
 1. Ao consumir `PropostaCriadaEvent`, o `PropostaCriadaEventConsumer` cria um registro `AnaliseRisco` com status `EmProcessamento`.
-2. O adaptador monta um prompt determinístico com os dados da proposta (tipo de seguro, valor de cobertura, valor de prêmio) e pede à **Anthropic Messages API** (`/v1/messages`, versão `2023-06-01`) uma resposta **apenas em JSON**, no formato `{"score": 0-100, "recomendacao": "Aprovar"|"Rejeitar", "justificativa": "..."}`.
+2. O adaptador selecionado monta um prompt determinístico com os dados da proposta (tipo de seguro, valor de cobertura, valor de prêmio) e pede ao provedor uma resposta **apenas em JSON**, no formato `{"score": 0-100, "recomendacao": "Aprovar"|"Rejeitar", "justificativa": "..."}` — essa parte (prompt + validação da resposta) é compartilhada pelos dois adaptadores (`RiskAssessmentJsonContract`), só a forma de chamar a API e extrair o texto da resposta é específica de cada provedor.
 3. A chamada HTTP roda sob uma política de resiliência do `Microsoft.Extensions.Http.Resilience` (retry, timeout, circuit-breaker via Polly) — falhas de rede ou do provedor viram uma exceção de domínio (`RiskAssessmentIndisponivelException`), e a análise fica marcada como `Falha` em vez de travar o consumidor.
 4. A resposta é rigorosamente validada antes de ser persistida: `score` precisa estar entre 0 e 100, `recomendacao` precisa ser um valor válido do enum `Recomendacao`, e a `justificativa` não pode faltar nem ultrapassar 500 caracteres — qualquer desvio também vira `RiskAssessmentIndisponivelException`.
 5. O resultado fica disponível em `GET /api/v1.0/propostas/{propostaId}/analise`.
 
 ### Importante: a IA é consultiva, não decisória
 
-O score e a recomendação da IA **não alteram automaticamente** o status da proposta. A decisão de aprovar ou rejeitar continua sendo de um humano com papel `analista`/`admin`, via `PUT /api/v1.0/propostas/{id}` no Proposta.Api — a IA existe para **subsidiar** essa decisão, não substituí-la. Isso mantém a responsabilidade final da subscrição com um humano, e evita que uma falha/alucinação do modelo aprove ou rejeite uma proposta sem supervisão.
-
-### Configuração
-
-```bash
-Anthropic__ApiKey=sk-ant-...
-Anthropic__Model=claude-haiku-4-5-20251001   # configurável por variável de ambiente
-```
+O score e a recomendação da IA **não alteram automaticamente** o status da proposta, seja qual for o provedor. A decisão de aprovar ou rejeitar continua sendo de um humano com papel `analista`/`admin`, via `PUT /api/v1.0/propostas/{id}` no Proposta.Api — a IA existe para **subsidiar** essa decisão, não substituí-la. Isso mantém a responsabilidade final da subscrição com um humano, e evita que uma falha/alucinação do modelo aprove ou rejeite uma proposta sem supervisão.
 
 ---
 
@@ -737,7 +760,7 @@ Anthropic__Model=claude-haiku-4-5-20251001   # configurável por variável de am
 | Verificação | Ferramenta | Gate |
 |---|---|---|
 | **Build** | `dotnet build` | Obrigatório ✅ |
-| **Testes** | xUnit + Testcontainers | Todos os 128 devem passar |
+| **Testes** | xUnit + Testcontainers | Todos os 132 devem passar |
 | **Code Analysis** | .NET Analyzers, StyleCop | `TreatWarningsAsErrors=true` |
 | **Security Scan** | CodeQL | Verificado em CI |
 | **Architecture Rules** | NetArchTest.Rules | Sem dependências circulares/invertidas |
