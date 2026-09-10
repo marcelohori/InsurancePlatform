@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using System.Text.Json.Serialization;
 using Analise.Api.Middleware;
+using Analise.Api.OpenApi;
 using Analise.Application.DependencyInjection;
 using Analise.Infrastructure.DependencyInjection;
 using Asp.Versioning;
@@ -27,7 +28,7 @@ builder.Services
     .AddControllers()
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options => options.AddDocumentTransformer<BearerSecuritySchemeTransformer>());
 
 builder.Services
     .AddApiVersioning(options =>
@@ -115,6 +116,11 @@ app.UseExceptionHandler();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/openapi/v1.json", "Analise.Api v1");
+        options.RoutePrefix = "swagger";
+    });
 }
 
 app.UseSerilogRequestLogging();
