@@ -14,7 +14,7 @@ public class ProcessarAnaliseUseCaseTests
     {
         var repositorio = new FakeAnaliseRepository();
         var port = FakeRiskAssessmentPort.ComSucesso(new RiskAssessmentResult(72, Recomendacao.Aprovar, "Risco moderado."));
-        var useCase = new ProcessarAnaliseUseCase(repositorio, port, new FakeUnitOfWork());
+        var useCase = new ProcessarAnaliseUseCase(repositorio, port, new FakeUnitOfWork(), Microsoft.Extensions.Logging.Abstractions.NullLogger<ProcessarAnaliseUseCase>.Instance);
         var propostaId = Guid.NewGuid();
 
         await useCase.ExecutarAsync(Entrada(propostaId), CancellationToken.None);
@@ -31,7 +31,7 @@ public class ProcessarAnaliseUseCaseTests
     {
         var repositorio = new FakeAnaliseRepository();
         var port = FakeRiskAssessmentPort.ComFalha("Provedor de IA indisponÃ­vel.");
-        var useCase = new ProcessarAnaliseUseCase(repositorio, port, new FakeUnitOfWork());
+        var useCase = new ProcessarAnaliseUseCase(repositorio, port, new FakeUnitOfWork(), Microsoft.Extensions.Logging.Abstractions.NullLogger<ProcessarAnaliseUseCase>.Instance);
         var propostaId = Guid.NewGuid();
 
         await useCase.ExecutarAsync(Entrada(propostaId), CancellationToken.None);
@@ -47,7 +47,7 @@ public class ProcessarAnaliseUseCaseTests
     {
         var repositorio = new FakeAnaliseRepository();
         var port = FakeRiskAssessmentPort.ComSucesso(new RiskAssessmentResult(50, Recomendacao.Aprovar, "x"));
-        var useCase = new ProcessarAnaliseUseCase(repositorio, port, new FakeUnitOfWork());
+        var useCase = new ProcessarAnaliseUseCase(repositorio, port, new FakeUnitOfWork(), Microsoft.Extensions.Logging.Abstractions.NullLogger<ProcessarAnaliseUseCase>.Instance);
         var propostaId = Guid.NewGuid();
 
         await useCase.ExecutarAsync(Entrada(propostaId), CancellationToken.None);
@@ -69,7 +69,7 @@ public class ProcessarAnaliseUseCaseTests
         repositorio.Adicionar(analise);
 
         var port = FakeRiskAssessmentPort.ComSucesso(new RiskAssessmentResult(40, Recomendacao.Aprovar, "Reprocessada."));
-        var useCase = new ProcessarAnaliseUseCase(repositorio, port, new FakeUnitOfWork());
+        var useCase = new ProcessarAnaliseUseCase(repositorio, port, new FakeUnitOfWork(), Microsoft.Extensions.Logging.Abstractions.NullLogger<ProcessarAnaliseUseCase>.Instance);
 
         await useCase.ExecutarAsync(Entrada(propostaId), CancellationToken.None);
 
@@ -95,7 +95,7 @@ public class ProcessarAnaliseUseCaseTests
         repositorio.Adicionar(analise);
 
         var port = FakeRiskAssessmentPort.ComSucesso(new RiskAssessmentResult(35, Recomendacao.Rejeitar, "Retomada."));
-        var useCase = new ProcessarAnaliseUseCase(repositorio, port, new FakeUnitOfWork());
+        var useCase = new ProcessarAnaliseUseCase(repositorio, port, new FakeUnitOfWork(), Microsoft.Extensions.Logging.Abstractions.NullLogger<ProcessarAnaliseUseCase>.Instance);
 
         await useCase.ExecutarAsync(Entrada(propostaId), CancellationToken.None);
 

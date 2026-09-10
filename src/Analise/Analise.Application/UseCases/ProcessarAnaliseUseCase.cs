@@ -1,6 +1,7 @@
 ﻿using Analise.Application.Exceptions;
 using Analise.Application.Ports;
 using Analise.Domain;
+using Microsoft.Extensions.Logging;
 
 namespace Analise.Application.UseCases;
 
@@ -8,12 +9,15 @@ namespace Analise.Application.UseCases;
 /// Triggered by the inbound adapter when a PropostaCriadaEvent is consumed. Starts (or skips,
 /// if already started for this proposal) a risk assessment, and resolves it to Concluida or
 /// Falha - a failure never propagates back to the caller, so a flaky AI provider can never
-/// block the proposal flow (see spec "Falha não bloqueia o fluxo de proposta").
+/// block the proposal flow (see spec "Falha não bloqueia o fluxo de proposta"). The exception is
+/// still logged (not rethrown) so a flaky provider is visible in logs instead of disappearing
+/// silently into the persisted "Falha" justificativa.
 /// </summary>
-public sealed class ProcessarAnaliseUseCase(
+public sealed partial class ProcessarAnaliseUseCase(
     IAnaliseRepository repositorio,
     IRiskAssessmentPort riskAssessmentPort,
     IUnitOfWork unitOfWork,
+    ILogger<ProcessarAnaliseUseCase> logger,
     TimeProvider? timeProvider = null)
 {
     private static readonly TimeSpan TempoLimiteProcessamento = TimeSpan.FromMinutes(15);
@@ -61,6 +65,8 @@ public sealed class ProcessarAnaliseUseCase(
         }
         catch (Exception ex)
         {
+            LogFalhaAvaliacaoRisco(logger, input.PropostaId, ex);
+
             existente.ConcluirComFalha(
                 ex is RiskAssessmentIndisponivelException
                     ? ex.Message
@@ -71,4 +77,7 @@ public sealed class ProcessarAnaliseUseCase(
         repositorio.Atualizar(existente);
         await unitOfWork.SalvarAlteracoesAsync(cancellationToken);
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Falha ao avaliar risco da proposta {PropostaId}.")]
+    private static partial void LogFalhaAvaliacaoRisco(ILogger logger, Guid propostaId, Exception exception);
 }
