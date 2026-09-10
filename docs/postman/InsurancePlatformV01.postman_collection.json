@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "InsurancePlatformV01",
-    "description": "Coleção de requisições para os 3 microsserviços (Proposta, Contratacao, Analise) do InsurancePlatformV01. Configure a variável {{jwt_token}} com um JWT válido (veja README.md > Endpoints e Acessos > Autenticação) antes de rodar as requisições protegidas.",
+    "description": "Coleção de requisições para os 3 microsserviços (Proposta, Contratacao, Analise) do InsurancePlatformV01. Rode primeiro a requisição 'Proposta > [DEV] Gerar Token' (Proposta.Api precisa estar rodando em ambiente Development, ex. `dotnet run`) - ela preenche automaticamente a variável {{jwt_token}} usada pelas demais requisições. Veja README.md > Endpoints e Acessos > Autenticação para detalhes.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -33,6 +33,30 @@
           "request": {
             "method": "GET",
             "url": "{{proposta_base_url}}/health/ready"
+          }
+        },
+        {
+          "name": "[DEV] Gerar Token (analista)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('jwt_token', body.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{proposta_base_url}}/api/dev/auth/token",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuarioId\": \"dev-user-1\",\n  \"role\": \"analista\"\n}"
+            },
+            "description": "Endpoint mapeado apenas quando o Proposta.Api roda em ambiente Development (dotnet run) - não existe em produção/Docker Compose. O script de teste já salva o token em {{jwt_token}}, usado por todas as outras requisições da coleção."
           }
         },
         {

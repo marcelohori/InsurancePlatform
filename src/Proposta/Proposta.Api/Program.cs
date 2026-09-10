@@ -4,7 +4,9 @@ using Asp.Versioning;
 using BuildingBlocks.Contracts.Authorization;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Proposta.Api.Endpoints;
 using Proposta.Api.Filters;
+using Proposta.Api.OpenApi;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Metrics;
@@ -33,7 +35,7 @@ builder.Services
     .AddControllers(options => options.Filters.Add<FluentValidationFilter>())
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options => options.AddDocumentTransformer<BearerSecuritySchemeTransformer>());
 
 builder.Services
     .AddApiVersioning(options =>
@@ -128,6 +130,12 @@ app.UseExceptionHandler();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/openapi/v1.json", "Proposta.Api v1");
+        options.RoutePrefix = "swagger";
+    });
+    app.MapDevAuthEndpoints();
 }
 
 app.UseSerilogRequestLogging();

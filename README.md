@@ -37,7 +37,7 @@
 
 InsurancePlatformV01 é uma plataforma de gestão de propostas e contratação de seguros, construída como **3 microsserviços independentes** (`Proposta`, `Contratacao`, `Analise`) que se comunicam via **REST síncrono** (verificação de proposta antes de contratar) e **eventos assíncronos** (avaliação de risco), cada um com sua própria base de dados PostgreSQL (*polyglot persistence*, um banco por serviço).
 
-O projeto foi desenvolvido como referência de boas práticas em **.NET 10**, aplicando **Arquitetura Hexagonal (Ports & Adapters)**, **Domain-Driven Design** e **Clean Architecture**, com foco em segurança (JWT + RBAC), resiliência (retry/circuit-breaker/timeout via Polly), observabilidade (Serilog + OpenTelemetry) e uma suíte de **125 testes automatizados** (unitários, integração com Testcontainers e regras de arquitetura).
+O projeto foi desenvolvido como referência de boas práticas em **.NET 10**, aplicando **Arquitetura Hexagonal (Ports & Adapters)**, **Domain-Driven Design** e **Clean Architecture**, com foco em segurança (JWT + RBAC), resiliência (retry/circuit-breaker/timeout via Polly), observabilidade (Serilog + OpenTelemetry) e uma suíte de **128 testes automatizados** (unitários, integração com Testcontainers e regras de arquitetura).
 
 ### Principais Funcionalidades
 
@@ -61,7 +61,7 @@ O projeto foi desenvolvido como referência de boas práticas em **.NET 10**, ap
 | **API REST** | Versionamento explícito via `Asp.Versioning` (v1.0) |
 | **Segurança** | JWT + Role-based Authorization + Input Validation (FluentValidation) |
 | **Resiliência** | Circuit-breaker, retry, timeout policies via Polly (chamadas HTTP e Anthropic API) |
-| **Testes** | 125 testes (unit + integration com Testcontainers + regras de arquitetura) |
+| **Testes** | 128 testes (unit + integration com Testcontainers + regras de arquitetura) |
 | **DevOps Ready** | Docker Compose, GitHub Actions, Health Checks |
 
 ---
@@ -81,6 +81,7 @@ Todas as versões abaixo são as **efetivamente fixadas** em [`Directory.Package
 | Asp.Versioning.Mvc / .ApiExplorer | **8.1.0** |
 | Microsoft.AspNetCore.Authentication.JwtBearer | **10.0.11** |
 | Microsoft.AspNetCore.OpenApi | **10.0.11** |
+| Swashbuckle.AspNetCore.SwaggerUI | **10.2.3** (UI apenas — o documento OpenAPI continua gerado por `Microsoft.AspNetCore.OpenApi`) |
 
 ### Banco de Dados
 
@@ -361,7 +362,9 @@ cd InsurancePlatformV01
 
 # 2. Configure variáveis de ambiente (copie de exemplo)
 cp .env.example .env
-# Edite .env com seus valores sensíveis (JWT_SIGNING_KEY, ANTHROPIC_API_KEY, senhas de banco)
+# Edite .env com seus valores sensíveis - troque JWT_SIGNING_KEY por uma string aleatória de
+# 32+ caracteres (as APIs recusam subir com o placeholder do .env.example de propósito) e,
+# se for usar a avaliação de risco por IA, defina ANTHROPIC_API_KEY.
 
 # 3. Suba o ambiente completo (Postgres, RabbitMQ, migrators e as 3 APIs)
 docker compose up --build
@@ -372,29 +375,61 @@ curl http://localhost:5081/health/live   # Contratacao
 curl http://localhost:5082/health/live   # Analise
 ```
 
-> Em Docker, os serviços rodam em `ASPNETCORE_ENVIRONMENT=Production` por padrão (nenhuma variável de ambiente a define diferente no `docker-compose.yml`), então os documentos OpenAPI (`/openapi/v1.json`) só ficam disponíveis rodando localmente com `dotnet run` (perfil `Development`) — ver [Endpoints e Acessos](#-endpoints-e-acessos).
+> Em Docker, os serviços rodam em `ASPNETCORE_ENVIRONMENT=Production` por padrão (nenhuma variável de ambiente a define diferente no `docker-compose.yml`), então o Swagger UI e o documento OpenAPI cru (`/openapi/v1.json`) só ficam disponíveis rodando localmente com `dotnet run` (perfil `Development`) — ver [Endpoints e Acessos](#-endpoints-e-acessos).
 
 ### Sem Docker (Desenvolvimento Local)
 
-```bash
-# 1. Suba apenas a infraestrutura (Postgres + RabbitMQ) via Docker...
-docker compose up postgres rabbitmq
-# ...ou aponte as connection strings em appsettings.Development.json para instâncias locais já existentes.
+Os serviços `*.Migrator` e `*.Api` **não têm connection string default em `appsettings.json`** — leem tudo de variáveis de ambiente (`ConnectionStrings__*`, `RabbitMq__*`, `Jwt__*`), exatamente como em produção. Além disso, o `docker-compose.yml` deixa as portas do Postgres/RabbitMQ **fechadas por padrão** (só acessíveis de dentro da rede Docker) — então rodar as APIs fora do Docker exige um passo a mais para expor essas portas ao host.
+
+```powershell
+# 1. Suba só a infraestrutura (Postgres + RabbitMQ), com um overlay que expõe as portas ao host
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d postgres rabbitmq
 
 # 2. Restaure e compile
 dotnet restore InsurancePlatformV01.slnx
 dotnet build InsurancePlatformV01.slnx
 
-# 3. Aplique as migrations de cada serviço (usuário com permissão de DDL)
+# 3. Aplique as migrations de cada serviço, usando o role "*_migrator" (tem permissão de DDL) -
+#    as senhas abaixo são os defaults de docker-compose.yml/.env.example; ajuste se você
+#    customizou *_MIGRATOR_PASSWORD no seu .env
+$env:ConnectionStrings__PropostaDbMigrator = "Host=localhost;Port=5432;Database=proposta_db;Username=proposta_migrator;Password=proposta_migrator"
 dotnet run --project src/Proposta/Proposta.Migrator
+
+$env:ConnectionStrings__ContratacaoDbMigrator = "Host=localhost;Port=5432;Database=contratacao_db;Username=contratacao_migrator;Password=contratacao_migrator"
 dotnet run --project src/Contratacao/Contratacao.Migrator
+
+$env:ConnectionStrings__AnaliseDbMigrator = "Host=localhost;Port=5432;Database=analise_db;Username=analise_migrator;Password=analise_migrator"
 dotnet run --project src/Analise/Analise.Migrator
 
-# 4. Rode cada API em um terminal separado (perfil "Development" do launchSettings.json)
+# 4. Rode cada API em um terminal separado, com o role "*_app" (só DML) - ASPNETCORE_URLS
+#    alinha a porta com a usada no resto deste README/Postman collection (5080/5081/5082).
+#    RunMigrationsOnStartup=false é obrigatório aqui: o default "true" do
+#    appsettings.Development.json faz a API tentar `CREATE TABLE IF NOT EXISTS
+#    "__EFMigrationsHistory"` no boot (é DDL, mesmo a tabela já existindo) - e o role "*_app"
+#    não tem permissão de DDL, então a API derruba com "permission denied for schema public".
+#    Como o Migrator já aplicou tudo no passo 3, isso é seguro de desligar aqui.
+$env:RunMigrationsOnStartup = "false"
+$env:ConnectionStrings__PropostaDb = "Host=localhost;Port=5432;Database=proposta_db;Username=proposta_app;Password=proposta_app"
+$env:RabbitMq__Host = "localhost"
+$env:RabbitMq__Username = "insurance"
+$env:RabbitMq__Password = "insurance"
+$env:Jwt__Issuer = "InsurancePlatformV01"
+$env:Jwt__Audience = "InsurancePlatformV01"
+$env:Jwt__SigningKey = "local-dev-signing-key-change-me-32-bytes-minimum"
+$env:ASPNETCORE_URLS = "http://localhost:5080"
 dotnet run --project src/Proposta/Proposta.Api
-dotnet run --project src/Contratacao/Contratacao.Api
-dotnet run --project src/Analise/Analise.Api
+# repita o passo 4 para Contratacao.Api (porta 5081, ConnectionStrings__ContratacaoDb, role
+# contratacao_app, mais PropostaApi__BaseUrl="http://localhost:5080") e Analise.Api (porta 5082,
+# ConnectionStrings__AnaliseDb, role analise_app, mais Anthropic__Model) em terminais separados.
 ```
+
+> **Atenção ao `Jwt__SigningKey`**: o valor `development-only-signing-key-change-me-32-bytes-min` do `.env.example` é rejeitado de propósito pelo `Program.cs` de cada API (é o próprio placeholder que o guard de startup bloqueia) — troque-o por qualquer string com 32+ caracteres antes de rodar fora do Docker Compose (o `docker-compose.yml` já usa esse mesmo default, então isso vale também para `docker compose up`).
+>
+> Fluxo validado de ponta a ponta com os três serviços rodando simultaneamente desta forma: `POST /api/dev/auth/token` → `POST /propostas` → evento `PropostaCriadaEvent` consumido pelo Analise.Api (via Outbox/RabbitMQ) → `PUT /propostas/{id}` (Aprovada) → `POST /contratacoes` (verifica a proposta via HTTP síncrono no Proposta.Api) → apólice criada.
+>
+> **Atalho mais rápido (sem separação de roles)**: `appsettings.Development.json` já tem `RunMigrationsOnStartup=true`, então apontar `ConnectionStrings__PropostaDb` direto para o usuário `postgres` (superuser) e rodar só `dotnet run --project src/Proposta/Proposta.Api` também aplica as migrations automaticamente no boot — mais rápido para iterar, mas abre mão do isolamento DDL/DML entre migrator e app descrito acima.
+>
+> **`docker-compose.local.yml`** é um overlay *opt-in* (só é aplicado quando referenciado explicitamente com `-f`) — o `docker compose up --build` "normal" (seção anterior) nunca expõe essas portas, mantendo o comportamento seguro por padrão.
 
 ### Configuração de Ambiente
 
@@ -430,29 +465,93 @@ ANTHROPIC_MODEL=claude-haiku-4-5-20251001
 | Proposta.Api | `http://localhost:5080` |
 | Contratacao.Api | `http://localhost:5081` |
 | Analise.Api | `http://localhost:5082` |
-| OpenAPI JSON (Proposta, apenas `dotnet run`/Development) | `http://localhost:5080/openapi/v1.json` |
-| OpenAPI JSON (Contratacao, apenas `dotnet run`/Development) | `http://localhost:5081/openapi/v1.json` |
-| OpenAPI JSON (Analise, apenas `dotnet run`/Development) | `http://localhost:5082/openapi/v1.json` |
+| Swagger UI (Proposta, apenas `dotnet run`/Development) | `http://localhost:5080/swagger/index.html` |
+| Swagger UI (Contratacao, apenas `dotnet run`/Development) | `http://localhost:5081/swagger/index.html` |
+| Swagger UI (Analise, apenas `dotnet run`/Development) | `http://localhost:5082/swagger/index.html` |
+| OpenAPI JSON cru (Proposta, apenas `dotnet run`/Development) | `http://localhost:5080/openapi/v1.json` |
+| OpenAPI JSON cru (Contratacao, apenas `dotnet run`/Development) | `http://localhost:5081/openapi/v1.json` |
+| OpenAPI JSON cru (Analise, apenas `dotnet run`/Development) | `http://localhost:5082/openapi/v1.json` |
 | PostgreSQL (interno à rede Docker) | `postgres:5432` |
 | RabbitMQ AMQP (interno à rede Docker) | `rabbitmq:5672` |
 | RabbitMQ Management UI (interno; acesse via `docker exec`) | `rabbitmq:15672` |
 
-> Nenhum dos três serviços expõe uma UI Swagger — apenas o documento OpenAPI cru (`Microsoft.AspNetCore.OpenApi`, sem Swashbuckle), e somente quando rodando em ambiente `Development`. Para explorar/testar os endpoints manualmente, use a [Postman Collection](docs/postman/InsurancePlatformV01.postman_collection.json).
+> Swagger UI (`Swashbuckle.AspNetCore.SwaggerUI`, servindo a UI para o documento gerado por `Microsoft.AspNetCore.OpenApi`) é mapeado **somente em ambiente `Development`** — ou seja, disponível rodando com `dotnet run` (ver [Sem Docker](#sem-docker-desenvolvimento-local)), mas **não** quando roda via `docker compose up` (que sobe em `Production` por padrão). Clique em **Authorize** na página e cole um JWT (gerado pelo endpoint `POST /api/dev/auth/token`, também dev-only) para testar os endpoints protegidos direto do navegador. Para o fluxo via Docker Compose (produção-like), use a [Postman Collection](docs/postman/InsurancePlatformV01.postman_collection.json).
 
 ### Autenticação
 
-Todos os endpoints de negócio exigem um **JWT Bearer** assinado com `Jwt:SigningKey` (HMAC-SHA256), com claims de `role` (`usuario`, `analista` ou `admin`) e `NameIdentifier`. Não há endpoint de login nesta plataforma de referência — para testes manuais, gere um token com o mesmo `iss`/`aud`/chave configurados no `.env`, por exemplo com [jwt.io](https://jwt.io) ou um pequeno script usando `System.IdentityModel.Tokens.Jwt` (veja `tests/*/JwtTestTokenFactory.cs` como modelo).
+Todos os endpoints de negócio exigem um **JWT Bearer** assinado com `Jwt:SigningKey` (HMAC-SHA256), com claims de `role` (`usuario`, `analista` ou `admin`) e `NameIdentifier`. Não há um fluxo de login real nesta plataforma de referência (não há cadastro/senha de usuário) — em vez disso, o **Proposta.Api** expõe um endpoint auxiliar **apenas em ambiente `Development`** (`dotnet run`; não mapeado quando roda via Docker Compose, que é `Production`) para gerar tokens de teste: `POST /api/dev/auth/token` (aparece agrupado sob a tag **Dev** no Swagger UI).
 
-| Papel | Pode |
-|---|---|
-| `usuario` | Criar e listar/ver as próprias propostas |
-| `analista` | Tudo que `usuario` pode, além de aprovar/rejeitar propostas e criar contratações |
-| `admin` | Tudo que `analista` pode, em qualquer proposta/contratação |
+```bash
+curl -X POST http://localhost:5080/api/dev/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"usuarioId": "dev-user-1", "role": "analista"}'
+```
+
+Retorna `{"token": "...", "usuarioId": "dev-user-1", "role": "analista", "expiresAt": "..."}`. Como `Jwt:Issuer`/`Audience`/`SigningKey` são compartilhados, esse token é válido nos três serviços (`Proposta.Api`, `Contratacao.Api`, `Analise.Api`). **Este endpoint nunca deve ser habilitado em produção** — é por isso que só é mapeado sob `IsDevelopment()`, seguindo o mesmo padrão já usado para o documento OpenAPI.
+
+Os dois campos do body são opcionais (sem body, o padrão é `usuarioId: "dev-user"`, `role: "usuario"`); `usuarioId` é livre — use valores diferentes para simular usuários distintos (ex.: testar que `user-1` não vê a proposta de `user-2`). Qualquer `role` fora da lista abaixo retorna `400`.
+
+| Papel | Pode | Payload para gerar o token |
+|---|---|---|
+| `usuario` | Criar e listar/ver as próprias propostas | `{"usuarioId": "user-1", "role": "usuario"}` |
+| `analista` | Tudo que `usuario` pode, além de aprovar/rejeitar propostas e criar contratações | `{"usuarioId": "analista-1", "role": "analista"}` |
+| `admin` | Tudo que `analista` pode, em qualquer proposta/contratação | `{"usuarioId": "admin-1", "role": "admin"}` |
+
+### Testando pelo Swagger UI
+
+1. Suba o serviço em `Development` (`dotnet run`, ver [Sem Docker](#sem-docker-desenvolvimento-local)) e abra `http://localhost:5080/swagger/index.html`.
+2. Na seção **Dev**, abra `POST /api/dev/auth/token` → **Try it out** → cole um dos payloads da tabela acima → **Execute** → copie o valor de `token` da resposta.
+3. Clique em **Authorize** (cadeado no topo da página), cole o token no campo `Bearer` (sem prefixo `Bearer ` — o Swashbuckle adiciona sozinho) e confirme. A partir daí, todo **Try it out** já envia o header `Authorization` automaticamente.
+4. Repita o passo 2 nas outras APIs (`5081`, `5082`) se for testá-las: como `Jwt:Issuer`/`Audience`/`SigningKey` são compartilhados, o mesmo token funciona nas três — não precisa gerar um novo por serviço.
+
+Exemplos de payload para os endpoints de negócio mais usados (os mesmos da [Postman Collection](docs/postman/InsurancePlatformV01.postman_collection.json)):
+
+**`POST /api/v1.0/propostas`** (Proposta.Api, papel `usuario`/`analista`/`admin`)
+```json
+{
+  "nomeSegurado": "Maria Silva",
+  "documentoSegurado": "11144477735",
+  "tipoSeguro": "Auto",
+  "valorCobertura": 50000,
+  "moedaCobertura": "BRL",
+  "valorPremio": 1200,
+  "moedaPremio": "BRL"
+}
+```
+`tipoSeguro` aceita `Auto`, `Vida`, `Residencial` ou `Saude`.
+
+**`PUT /api/v1.0/propostas/{id}`** (Proposta.Api, papel `analista`/`admin` — aprova a proposta para liberar a contratação)
+```json
+{
+  "nomeSegurado": "Maria Silva",
+  "documentoSegurado": "11144477735",
+  "tipoSeguro": "Auto",
+  "valorCobertura": 50000,
+  "moedaCobertura": "BRL",
+  "valorPremio": 1200,
+  "moedaPremio": "BRL",
+  "status": "Aprovada"
+}
+```
+`status` aceita `EmAnalise`, `Aprovada` ou `Rejeitada`.
+
+**`POST /api/v1.0/contratacoes`** (Contratacao.Api, papel `analista`/`admin` — exige uma proposta já `Aprovada`; header opcional `Idempotency-Key` com um UUID v4)
+```json
+{
+  "propostaId": "cole-aqui-o-id-da-proposta-aprovada",
+  "dataContratacao": "2026-01-01",
+  "dataInicioVigencia": "2026-01-01",
+  "dataFimVigencia": "2027-01-01",
+  "valorPremio": 1200,
+  "moedaValorPremio": "BRL"
+}
+```
 
 ### Proposta.Api — `/api/v1.0/propostas`
 
 | Método | Rota | Descrição | Status |
 |---|---|---|---|
+| `POST` | `/api/dev/auth/token` | **[DEV ONLY]** Gera um JWT de teste para `usuarioId`/`role` informados (não mapeado em produção) | `200`, `400` |
 | `POST` | `/api/v1.0/propostas` | Cria uma proposta (papel `usuario`/`analista`/`admin`) | `201`, `400`, `401` |
 | `GET` | `/api/v1.0/propostas?pagina=&tamanhoPagina=` | Lista propostas paginadas (usuário vê só as suas; `analista`/`admin` veem todas) | `200`, `401` |
 | `GET` | `/api/v1.0/propostas/{id}` | Obtém uma proposta por Id | `200`, `404` |
@@ -575,21 +674,21 @@ dotnet test tests/Architecture.Tests
 
 ### Resultado Esperado
 
-Suíte completa: **125 testes, 0 falhas**.
+Suíte completa: **128 testes, 0 falhas**.
 
 | Projeto | Testes | Tipo |
 |---|---|---|
 | Proposta.UnitTests | 39 | Unit |
-| Proposta.IntegrationTests | 20 | Integration (Testcontainers) |
+| Proposta.IntegrationTests | 23 | Integration (Testcontainers) |
 | Contratacao.UnitTests | 23 | Unit |
 | Contratacao.IntegrationTests | 14 | Integration (Testcontainers + WireMock) |
 | Analise.UnitTests | 15 | Unit |
 | Analise.IntegrationTests | 5 | Integration (Testcontainers) |
 | Architecture.Tests | 9 | Regras de arquitetura (dependências, camadas) |
-| **Total** | **125** | — |
+| **Total** | **128** | — |
 
 ```
-Aprovado! – Com falha: 0, Aprovado: 125, Ignorado: 0, Total: 125
+Aprovado! – Com falha: 0, Aprovado: 128, Ignorado: 0, Total: 128
 ```
 
 ---
@@ -638,7 +737,7 @@ Anthropic__Model=claude-haiku-4-5-20251001   # configurável por variável de am
 | Verificação | Ferramenta | Gate |
 |---|---|---|
 | **Build** | `dotnet build` | Obrigatório ✅ |
-| **Testes** | xUnit + Testcontainers | Todos os 125 devem passar |
+| **Testes** | xUnit + Testcontainers | Todos os 128 devem passar |
 | **Code Analysis** | .NET Analyzers, StyleCop | `TreatWarningsAsErrors=true` |
 | **Security Scan** | CodeQL | Verificado em CI |
 | **Architecture Rules** | NetArchTest.Rules | Sem dependências circulares/invertidas |

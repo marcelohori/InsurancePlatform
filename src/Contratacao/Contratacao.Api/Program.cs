@@ -4,6 +4,7 @@ using Asp.Versioning;
 using BuildingBlocks.Contracts.Authorization;
 using Contratacao.Api.Filters;
 using Contratacao.Api.Middleware;
+using Contratacao.Api.OpenApi;
 using Contratacao.Application.DependencyInjection;
 using Contratacao.Infrastructure.DependencyInjection;
 using FluentValidation;
@@ -33,7 +34,7 @@ builder.Services
     .AddControllers(options => options.Filters.Add<FluentValidationFilter>())
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options => options.AddDocumentTransformer<BearerSecuritySchemeTransformer>());
 
 builder.Services
     .AddApiVersioning(options =>
@@ -125,6 +126,11 @@ app.UseExceptionHandler();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/openapi/v1.json", "Contratacao.Api v1");
+        options.RoutePrefix = "swagger";
+    });
 }
 
 app.UseSerilogRequestLogging();

@@ -1,0 +1,17 @@
+# Overlay local-only: expõe as portas de Postgres/RabbitMQ no host para permitir rodar os
+# serviços diretamente com `dotnet run` (fora da rede Docker) durante o desenvolvimento.
+#
+# NÃO é aplicado por um `docker compose up` normal - é preciso referenciá-lo explicitamente:
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d postgres rabbitmq
+#
+# Nunca use este overlay em produção: o docker-compose.yml principal mantém essas portas
+# fechadas de propósito (Postgres e RabbitMQ só devem ser acessíveis de dentro da rede Docker).
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  rabbitmq:
+    ports:
+      - "5672:5672"
+      - "15672:15672"
